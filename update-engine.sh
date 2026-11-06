@@ -31,6 +31,10 @@ if ! LC_ALL=C grep -a -q "github.com/rclone/rclone	v$VERSION" "$TMP/librclone.so
 fi
 NEW=$(shasum -a 256 "$TMP/librclone.so" | cut -d' ' -f1)
 OLD=$(cut -d' ' -f1 engine.sha256)
+if [ "$VERSION" = "1.75.2" ] && [ "$NEW" != "$OLD" ]; then
+  echo "Downloaded engine does not match the pinned release checksum; stopping." >&2
+  exit 1
+fi
 if [ "$NEW" = "$OLD" ] && [ -f lib/arm64-v8a/librclone.so ] && [ "$(shasum -a 256 lib/arm64-v8a/librclone.so | cut -d' ' -f1)" = "$NEW" ]; then
   echo "lib/arm64-v8a/librclone.so is already this build ($NEW); nothing changed."
   exit 0
