@@ -1,12 +1,12 @@
 # Rclone Browser Next Mobile 0.3.0
 
-Android 檔案管理測試版，內含官方 rclone 1.75.2 Android ARM64 引擎。
+Android 檔案管理器，內含官方 rclone 1.75.2 Android ARM64 引擎。
 
 提供單頁、分頁與上下雙窗格瀏覽；支援長按多選、複製、移動、背景傳輸、取消，以及兩種先預覽再執行的單向同步方式。介面採用與桌面版相同的圖示和紫色設計，支援深色外觀。
 
 ## 安裝需求
 
-下載 Android 安裝包（APK），在 ARM64 裝置安裝。最低系統設定為 Android 8；目前實際驗證的是 Android 14 ARM64 模擬器。這是使用開發簽章的測試版。
+下載 Android 安裝包（APK），在 ARM64 裝置安裝。最低系統設定為 Android 8；目前實際驗證的是 Android 14 ARM64 模擬器。
 
 ## 驗證與限制
 
