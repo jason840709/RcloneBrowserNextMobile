@@ -1,7 +1,7 @@
 <p align="center"><img src="res/mipmap-xxxhdpi/ic_launcher_fg.png" width="112" alt="Rclone Browser Next Mobile 應用程式圖示"></p>
 <h1 align="center">Rclone Browser Next Mobile</h1>
 <p align="center">給 Android 的 rclone 檔案管理器。手機與雲端檔案，切換位置就能搬檔。</p>
-<p align="center"><a href="https://github.com/jason840709/RcloneBrowserNextMobile/releases/tag/v0.3.0">下載 0.3.0 測試版</a> · <a href="docs/USER_GUIDE.zh-TW.md">使用手冊</a> · <a href="docs/BUILD.md">建置說明</a> · <a href="https://github.com/jason840709/RcloneBrowserNextMobile/issues">回報問題</a></p>
+<p align="center"><a href="https://github.com/jason840709/RcloneBrowserNextMobile/releases/tag/v0.3.0">下載 0.3.0</a> · <a href="docs/USER_GUIDE.zh-TW.md">使用手冊</a> · <a href="docs/BUILD.md">建置說明</a> · <a href="https://github.com/jason840709/RcloneBrowserNextMobile/issues">回報問題</a></p>
 
 <p align="center"><img src="docs/images/split.png" width="360" alt="上下雙窗格：上方遠端資料夾，下方手機資料夾，中間提供同步設定"></p>
 
@@ -11,7 +11,7 @@
 
 Rclone Browser Next Mobile 是 [Rclone Browser Next](https://github.com/jason840709/RcloneBrowserNext) 系列的 Android 檔案管理器，使用相同的應用程式圖示與紫色介面。檔案傳輸由 [rclone](https://rclone.org/) 執行，手機介面提供單頁、分頁與上下雙窗格，方便瀏覽資料夾、複製、移動和同步。
 
-**目前為 0.3.0 測試版，提供 Android ARM64 安裝包。** 最低系統設定為 Android 8；實際驗證平台為 Android 14 ARM64 模擬器，其他系統版本與實體手機仍待驗證。
+**目前版本為 0.3.0，提供 Android ARM64 安裝包。** 最低系統設定為 Android 8；實際驗證平台為 Android 14 ARM64 模擬器，其他系統版本與實體手機仍待驗證。
 
 ## 手機上怎麼用？
 
