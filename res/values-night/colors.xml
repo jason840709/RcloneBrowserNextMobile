@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="surface">#141218</color>
+    <color name="surface_low">#1A181E</color>
+    <color name="surface_container">#211F26</color>
+    <color name="surface_high">#2B2930</color>
+    <color name="surface_highest">#36343B</color>
+    <color name="on_surface">#E6E0E9</color>
+    <color name="on_surface_variant">#CAC4D0</color>
+    <color name="outline">#938F99</color>
+    <color name="outline_variant">#36323B</color>
+    <color name="primary">#C4A6DE</color>
+    <color name="on_primary">#2B1D38</color>
+    <color name="primary_container">#45325A</color>
+    <color name="on_primary_container">#F0DBFF</color>
+    <color name="active_header">#211A28</color>
+    <color name="error">#F2B8B5</color>
+    <color name="on_error">#601410</color>
+    <color name="error_container">#8C1D18</color>
+    <color name="on_error_container">#F9DEDC</color>
+    <color name="success">#8FD3AE</color>
+    <color name="success_container">#1F3A2B</color>
+    <color name="inverse_surface">#E6E0E9</color>
+    <color name="inverse_on_surface">#322F35</color>
+    <color name="inverse_primary">#76558F</color>
+    <color name="ripple">#24E6E0E9</color>
+    <color name="scrim">#8A000000</color>
+    <color name="launcher_bg">#F6F1FA</color>
+    <color name="split_bar">#45325A</color>
+    <color name="on_split_bar">#F0DBFF</color>
+
+    <color name="tile_folder_bg">#382C45</color>  <color name="tile_folder_fg">#D5BCEB</color>
+    <color name="tile_image_bg">#1C3A33</color>   <color name="tile_image_fg">#8ED6C3</color>
+    <color name="tile_video_bg">#45222B</color>   <color name="tile_video_fg">#F3A9B9</color>
+    <color name="tile_audio_bg">#44321E</color>   <color name="tile_audio_fg">#F2C38A</color>
+    <color name="tile_doc_bg">#1F2E47</color>     <color name="tile_doc_fg">#A9C4F2</color>
+    <color name="tile_pdf_bg">#47231F</color>     <color name="tile_pdf_fg">#F3AFA6</color>
+    <color name="tile_archive_bg">#3A3127</color> <color name="tile_archive_fg">#DCC3A4</color>
+    <color name="tile_apk_bg">#233A1F</color>     <color name="tile_apk_fg">#A8D99B</color>
+    <color name="tile_code_bg">#2A3138</color>    <color name="tile_code_fg">#B6C4D3</color>
+    <color name="tile_file_bg">#2E2B32</color>    <color name="tile_file_fg">#C9C2CF</color>
+</resources>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Palette follows the desktop Rclone Browser Next accent (#76558F light / #C4A6DE dark). -->
+<resources>
+    <color name="surface">#FDFBFE</color>
+    <color name="surface_low">#F7F3F9</color>
+    <color name="surface_container">#F2EDF5</color>
+    <color name="surface_high">#ECE6F0</color>
+    <color name="surface_highest">#E6E0E9</color>
+    <color name="on_surface">#1D1B20</color>
+    <color name="on_surface_variant">#5B5661</color>
+    <color name="outline">#7A7480</color>
+    <color name="outline_variant">#E3DDE7</color>
+    <color name="primary">#76558F</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="primary_container">#EFE3F8</color>
+    <color name="on_primary_container">#3F2554</color>
+    <color name="active_header">#F4ECF9</color>
+    <color name="error">#B3261E</color>
+    <color name="on_error">#FFFFFF</color>
+    <color name="error_container">#F9DEDC</color>
+    <color name="on_error_container">#410E0B</color>
+    <color name="success">#2F7A57</color>
+    <color name="success_container">#DDF2E5</color>
+    <color name="inverse_surface">#322F35</color>
+    <color name="inverse_on_surface">#F5EFF7</color>
+    <color name="inverse_primary">#D9BCF0</color>
+    <color name="ripple">#1F1D1B20</color>
+    <color name="scrim">#52000000</color>
+    <color name="launcher_bg">#F6F1FA</color>
+    <color name="split_bar">#76558F</color>
+    <color name="on_split_bar">#FFFFFF</color>
+
+    <color name="tile_folder_bg">#EFE5F7</color>  <color name="tile_folder_fg">#7B5A96</color>
+    <color name="tile_image_bg">#DFF1EC</color>   <color name="tile_image_fg">#1F7564</color>
+    <color name="tile_video_bg">#FBE3E7</color>   <color name="tile_video_fg">#B0344F</color>
+    <color name="tile_audio_bg">#FCEBD9</color>   <color name="tile_audio_fg">#9A5A10</color>
+    <color name="tile_doc_bg">#E1EAF8</color>     <color name="tile_doc_fg">#3A62A7</color>
+    <color name="tile_pdf_bg">#FBE2DF</color>     <color name="tile_pdf_fg">#B3362B</color>
+    <color name="tile_archive_bg">#EEE7DE</color> <color name="tile_archive_fg">#7A5B3A</color>
+    <color name="tile_apk_bg">#E2F1DF</color>     <color name="tile_apk_fg">#3A7A31</color>
+    <color name="tile_code_bg">#E4E9EF</color>    <color name="tile_code_fg">#46586B</color>
+    <color name="tile_file_bg">#ECE8EF</color>    <color name="tile_file_fg">#6A6470</color>
+</resources>

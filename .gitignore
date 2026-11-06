@@ -1,0 +1,8 @@
+build/
+dist/
+downloads/
+lib/
+*.keystore
+*.jks
+*.conf
+local.properties

@@ -1,0 +1,12 @@
+Rclone Browser Next Mobile 0.3.0
+
+Bundled engine: rclone v1.75.2, Android ARM64, Go 1.26.9.
+Official executable, used unchanged under the filename librclone.so.
+Download: https://beta.rclone.org/v1.75.2/testbuilds/rclone-android-21-armv8a.gz
+Source: https://github.com/rclone/rclone/tree/v1.75.2
+Build recipe: https://github.com/rclone/rclone/blob/v1.75.2/.github/workflows/build.yml
+License: MIT; see RCLONE-LICENSE.txt.
+Dependency inventory: https://github.com/rclone/rclone/blob/v1.75.2/go.mod
+
+Desktop design and icon: https://github.com/jason840709/RcloneBrowserNext
+The mobile interface and service wrapper are implemented in this project.
