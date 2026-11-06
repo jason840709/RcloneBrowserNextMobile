@@ -48,6 +48,7 @@ final class PaneView extends LinearLayout {
         void requestAccess();
         boolean needsAccess(String path);
         String rootLabel(String root);
+        String localRoot(String path);
         String displayPath(String path);
         int locationIcon(String path);
         Comparator<FileOps.Entry> comparator();
@@ -343,7 +344,7 @@ final class PaneView extends LinearLayout {
         list.setFastScrollEnabled(shown.size() > 80);
         crumbs.set(path);
         locIcon.setImageResource(host.locationIcon(path));
-        locTile.setContentDescription("切換位置，目前在" + host.rootLabel(rootOf(path)));
+        locTile.setContentDescription("切換位置，目前在" + host.rootLabel(host.localRoot(path)));
         selectCount.setText("已選 " + selected.size() + " 項");
         applyHeaderMode(true);
         updateState(hiddenCount);
@@ -399,14 +400,8 @@ final class PaneView extends LinearLayout {
         stateView.addView(b, lp);
     }
 
-    static String rootOf(String p) {
-        if (FileOps.isLocal(p)) return p.equals(FileOps.PHONE) || p.startsWith(FileOps.PHONE + "/") ? FileOps.PHONE : "/";
-        return p.substring(0, p.indexOf(':') + 1);
-    }
-
     String label(String p) {
-        if (p.equals(FileOps.PHONE)) return host.rootLabel(p);
-        if (p.endsWith(":")) return host.rootLabel(p);
+        if (p.endsWith(":") || host.localRoot(p).equals(p)) return host.rootLabel(p);
         String s = p.endsWith("/") ? p.substring(0, p.length() - 1) : p;
         int i = Math.max(s.lastIndexOf('/'), s.lastIndexOf(':'));
         return i >= 0 ? s.substring(i + 1) : s;
@@ -564,8 +559,8 @@ final class PaneView extends LinearLayout {
             ArrayList<String[]> out = new ArrayList<>();
             String root, rest;
             if (FileOps.isLocal(p)) {
-                if (p.equals(FileOps.PHONE) || p.startsWith(FileOps.PHONE + "/")) { root = FileOps.PHONE; rest = p.substring(root.length()); }
-                else { root = "/"; rest = p; }
+                root = host.localRoot(p);
+                rest = root.equals("/") ? p : p.substring(root.length());
             } else {
                 int colon = p.indexOf(':');
                 root = p.substring(0, colon + 1);

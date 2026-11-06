@@ -129,7 +129,11 @@ public final class TransferService extends Service {
             if(job.directory && job.move) args.add("--delete-empty-src-dirs");
             if(!job.sync) args.add("--ignore-existing");
             else args.add("--delete-after");
-            Collections.addAll(args,"--transfers","4","--checkers","8","--stats","1s","--stats-one-line","--use-json-log","--stats-log-level","NOTICE","--log-level","NOTICE","--retries","2","--low-level-retries","3","--contimeout","15s","--timeout","60s");
+            // Values come from the user's settings; the defaults equal the fixed values used up to 0.3.0
+            // (4 transfers, 8 checkers, no bandwidth limit, 15 s connect and 60 s idle timeouts).
+            Collections.addAll(args,"--transfers",String.valueOf(Settings.transfers(this)),"--checkers",String.valueOf(Settings.checkers(this)),"--stats","1s","--stats-one-line","--use-json-log","--stats-log-level","NOTICE","--log-level","NOTICE","--retries","2","--low-level-retries","3","--contimeout",Settings.connectTimeout(this),"--timeout",Settings.idleTimeout(this));
+            int bandwidth=Settings.bandwidthMB(this);
+            if(bandwidth>0) Collections.addAll(args,"--bwlimit",bandwidth+"M");
             Collections.addAll(args,"--",job.src,job.dst);
             synchronized(LOCK) {
                 if(job.cancelled || destroyed) {record(this,job,"已取消"); return;}

@@ -2,6 +2,7 @@ package tw.jason.rclone;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -14,7 +15,6 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.provider.Settings;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -89,14 +89,46 @@ public class MainActivity extends Activity implements PaneView.Host {
     // ============================================================================================
     // Lifecycle
 
+    /** Applies the light/dark choice from Settings before any resource is read. */
+    @Override protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        applyNightOverride(this, base);
+    }
+
+    static void applyNightOverride(android.view.ContextThemeWrapper activity, Context base) {
+        int night = Settings.night(base);
+        if (night == Settings.NIGHT_SYSTEM) return;
+        Configuration c = new Configuration();
+        c.fontScale = 0; // keep the user's font size; only the night flag is overridden
+        int current = base.getResources().getConfiguration().uiMode;
+        c.uiMode = (current & ~Configuration.UI_MODE_NIGHT_MASK)
+                | (night == Settings.NIGHT_DARK ? Configuration.UI_MODE_NIGHT_YES : Configuration.UI_MODE_NIGHT_NO);
+        activity.applyOverrideConfiguration(c);
+    }
+
+    /** Settings that need a fresh screen when they change. */
+    private String lookKey() {
+        return Settings.accent(this) + "|" + Settings.night(this) + "|" + Settings.dense(this);
+    }
+
+    private String appliedLook = "";
+    private long configStamp;
+    private long backPressedAt;
+
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        Ui.init(this);
         SharedPreferences prefs = getPreferences(0);
+        Settings.migrate(this, prefs);
+        Ui.init(this);
+        appliedLook = lookKey();
+        configStamp = Settings.prefs(this).getLong(Settings.CONFIG_STAMP, 0);
+        FileRow.dense = Settings.dense(this);
+        FileRow.Thumbs.enabled = Settings.thumbnails(this);
+        LauncherIcon.apply(this);
         mode = prefs.getInt("mode", SINGLE);
         sortKey = prefs.getInt("sort", SORT_NAME);
         descending = prefs.getBoolean("descending", false);
-        hidden = prefs.getBoolean("hidden", false);
+        hidden = Settings.hidden(this);
         splitRatio = prefs.getFloat("split", .5f);
         active = prefs.getInt("active", 0);
         if (state != null) active = state.getInt("active", active);
@@ -104,8 +136,10 @@ public class MainActivity extends Activity implements PaneView.Host {
 
         setupWindow();
         build();
-        panes[0].path = prefs.getString("left", FileOps.PHONE);
-        panes[1].path = prefs.getString("right", FileOps.DOWNLOADS);
+        boolean fromHome = Settings.startAt(this) == Settings.START_HOME && state == null;
+        panes[0].path = fromHome ? FileOps.PHONE : prefs.getString("left", FileOps.PHONE);
+        panes[1].path = fromHome ? FileOps.DOWNLOADS : prefs.getString("right", FileOps.DOWNLOADS);
+        for (PaneView p : panes) if (FileOps.isLocal(p.path) && !new java.io.File(p.path).isDirectory()) p.path = FileOps.PHONE;
         if (state != null) restoreClipboard(state);
         layoutMode(false);
         neededAccess = needsAccess(FileOps.PHONE);
@@ -143,12 +177,18 @@ public class MainActivity extends Activity implements PaneView.Host {
     @Override protected void onPause() {
         super.onPause();
         getPreferences(0).edit().putInt("mode", mode).putString("left", panes[0].path).putString("right", panes[1].path)
-                .putInt("sort", sortKey).putBoolean("descending", descending).putBoolean("hidden", hidden)
+                .putInt("sort", sortKey).putBoolean("descending", descending)
                 .putFloat("split", splitRatio).putInt("active", active).apply();
     }
 
     @Override protected void onResume() {
         super.onResume();
+        if (!lookKey().equals(appliedLook)) { recreate(); return; }
+        Storage.invalidate();
+        hidden = Settings.hidden(this);
+        FileRow.Thumbs.enabled = Settings.thumbnails(this);
+        long stamp = Settings.prefs(this).getLong(Settings.CONFIG_STAMP, 0);
+        if (stamp != configStamp) { configStamp = stamp; afterConfigReplaced(); }
         boolean now = needsAccess(FileOps.PHONE);
         if (neededAccess && !now) for (PaneView p : panes) if (FileOps.isLocal(p.path)) load(p, p.path, 0);
         neededAccess = now;
@@ -170,9 +210,20 @@ public class MainActivity extends Activity implements PaneView.Host {
     // Window and layout
 
     private void setupWindow() {
-        Window w = getWindow();
+        setupWindow(this);
+    }
+
+    static void setupWindow(Activity a) {
+        Window w = a.getWindow();
+        w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Ui.surface));
         if (Build.VERSION.SDK_INT >= 30) {
             w.setDecorFitsSystemWindows(false);
+            w.getDecorView(); // the insets controller exists only after the decor view is created
+            android.view.WindowInsetsController ic = w.getInsetsController();
+            if (ic != null) {
+                int light = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                ic.setSystemBarsAppearance(Ui.dark ? 0 : light, light);
+            }
         } else {
             int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
             if (!Ui.dark) {
@@ -652,19 +703,21 @@ public class MainActivity extends Activity implements PaneView.Host {
     @Override public void openEntry(PaneView p, FileOps.Entry e) {
         if (e.dir) { load(p, e.path, 1); return; }
         if (!FileOps.isLocal(e.path)) {
-            overlay.new Dialog(e.name, "下載到手機的 Download 資料夾後，再從那裡開啟。那裡已有同名檔案時不會重新下載，開到的會是舊的那份。")
+            overlay.new Dialog(e.name, "下載到本機的 Download 資料夾後，再從那裡開啟。那裡已有同名檔案時不會重新下載，開到的會是舊的那份。")
                     .action("取消", Ui.ButtonStyle.TEXT, null)
-                    .action("下載", Ui.ButtonStyle.FILLED, () -> {
+                    .action("下載", Ui.ButtonStyle.FILLED, () -> whenNetworkOk(true, () -> {
                         try {
                             askNotifications();
                             TransferService.enqueue(this, e.path, FileOps.join(FileOps.DOWNLOADS, e.name), false, false, false);
                             transferStarted();
                         } catch (Exception ex) { error(ex); }
-                    }).show();
+                    })).show();
             return;
         }
         try {
-            Uri u = new Uri.Builder().scheme("content").authority("tw.jason.rclone.files").path(e.path).build();
+            Storage.Volume v = Storage.volumeFor(this, e.path);
+            String authority = v == null || v.kind == Storage.INTERNAL ? "tw.jason.rclone.files" : VolumeProvider.AUTHORITY;
+            Uri u = new Uri.Builder().scheme("content").authority(authority).path(e.path).build();
             Intent in = new Intent(Intent.ACTION_VIEW).setDataAndType(u, getContentResolver().getType(u)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(Intent.createChooser(in, "開啟「" + e.name + "」"));
         } catch (Exception ex) {
@@ -693,9 +746,9 @@ public class MainActivity extends Activity implements PaneView.Host {
     @Override public void requestAccess() {
         if (Build.VERSION.SDK_INT >= 30) {
             try {
-                startActivityForResult(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + getPackageName())), 42);
+                startActivityForResult(new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + getPackageName())), 42);
             } catch (Exception e) {
-                startActivityForResult(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION), 42);
+                startActivityForResult(new Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION), 42);
             }
         } else {
             requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 42);
@@ -716,13 +769,24 @@ public class MainActivity extends Activity implements PaneView.Host {
     }
 
     @Override public String rootLabel(String root) {
-        if (root.equals(FileOps.PHONE)) return "手機";
         if (root.equals("/")) return "根目錄";
-        return root.endsWith(":") ? root.substring(0, root.length() - 1) : root;
+        if (root.endsWith(":")) return root.substring(0, root.length() - 1);
+        Storage.Volume v = Storage.volumeFor(this, root);
+        return v != null && v.root.equals(root) ? v.label : root;
+    }
+
+    /** Volume root for a local path ("/" when it is outside every volume); the remote name for remotes. */
+    @Override public String localRoot(String path) {
+        if (!FileOps.isLocal(path)) return path.substring(0, path.indexOf(':') + 1);
+        Storage.Volume v = Storage.volumeFor(this, path);
+        return v != null ? v.root : "/";
     }
 
     @Override public int locationIcon(String path) {
-        if (FileOps.isLocal(path)) return R.drawable.ic_phone;
+        if (FileOps.isLocal(path)) {
+            Storage.Volume v = Storage.volumeFor(this, path);
+            return Storage.icon(v != null ? v.kind : Storage.INTERNAL);
+        }
         int colon = path.indexOf(':');
         return FileOps.typeIcon(remotes.get(path.substring(0, colon + 1)));
     }
@@ -788,7 +852,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         });
     }
 
-    static boolean isRoot(String path) { return path.equals(FileOps.PHONE) || path.endsWith(":") || path.equals("/"); }
+    boolean isRoot(String path) { return path.endsWith(":") || path.equals("/") || localRoot(path).equals(path); }
 
     static String parent(String p) {
         int slash = p.lastIndexOf('/');
@@ -830,13 +894,16 @@ public class MainActivity extends Activity implements PaneView.Host {
         if (clipboard.isEmpty()) return;
         PaneView target = panes[active];
         if (target.loading || !target.error.isEmpty()) { message(null, "等目前資料夾讀取完成再貼上。"); return; }
-        try {
-            askNotifications();
-            FileOps.enqueueAll(this, new ArrayList<>(clipboard), target.path, moving);
-            clipboard.clear();
-            updateBars();
-            transferStarted();
-        } catch (Exception e) { error(e); }
+        boolean remote = !FileOps.isLocal(target.path) || !FileOps.isLocal(clipboard.get(0).path);
+        whenNetworkOk(remote, () -> {
+            try {
+                askNotifications();
+                FileOps.enqueueAll(this, new ArrayList<>(clipboard), target.path, moving);
+                clipboard.clear();
+                updateBars();
+                transferStarted();
+            } catch (Exception e) { error(e); }
+        });
     }
 
     void transferToOther(boolean move) {
@@ -844,12 +911,14 @@ public class MainActivity extends Activity implements PaneView.Host {
         ArrayList<FileOps.Entry> items = from.selectedEntries();
         if (items.isEmpty()) return;
         if (to.loading || !to.error.isEmpty()) { message(null, "等另一個窗格讀取完成再傳送。"); return; }
-        try {
-            askNotifications();
-            FileOps.enqueueAll(this, items, to.path, move);
-            from.clearSelection();
-            transferStarted();
-        } catch (Exception e) { error(e); }
+        whenNetworkOk(!FileOps.isLocal(from.path) || !FileOps.isLocal(to.path), () -> {
+            try {
+                askNotifications();
+                FileOps.enqueueAll(this, items, to.path, move);
+                from.clearSelection();
+                transferStarted();
+            } catch (Exception e) { error(e); }
+        });
     }
 
     void transferStarted() {
@@ -961,8 +1030,10 @@ public class MainActivity extends Activity implements PaneView.Host {
     }
 
     @Override public String displayPath(String path) {
-        if (path.equals(FileOps.PHONE)) return "手機";
-        return path.startsWith(FileOps.PHONE + "/") ? "手機/" + path.substring(FileOps.PHONE.length() + 1) : path;
+        if (!FileOps.isLocal(path)) return path;
+        Storage.Volume v = Storage.volumeFor(this, path);
+        if (v == null) return path;
+        return path.equals(v.root) ? v.label : v.label + "/" + path.substring(v.root.length() + 1);
     }
 
     // ============================================================================================
@@ -1169,11 +1240,13 @@ public class MainActivity extends Activity implements PaneView.Host {
                 else go = "開始同步";
                 buttons.addView(Ui.button(MainActivity.this, go, style, v -> {
                     sheet.dismiss();
-                    try {
-                        askNotifications();
-                        TransferService.enqueue(MainActivity.this, from, to, true, false, chosen == SYNC_MIRROR);
-                        transferStarted();
-                    } catch (Exception ex) { error(ex); }
+                    whenNetworkOk(!FileOps.isLocal(from) || !FileOps.isLocal(to), () -> {
+                        try {
+                            askNotifications();
+                            TransferService.enqueue(MainActivity.this, from, to, true, false, chosen == SYNC_MIRROR);
+                            transferStarted();
+                        } catch (Exception ex) { error(ex); }
+                    });
                 }), marginLeft(8));
             });
         }
@@ -1245,11 +1318,35 @@ public class MainActivity extends Activity implements PaneView.Host {
     // Locations and connections
 
     @Override public void showLocations(PaneView p, View anchor) {
+        Storage.invalidate();
         LinearLayout c = Ui.column(this);
         final Overlay.Sheet[] holder = new Overlay.Sheet[1];
         c.addView(overlay.sheetTitle("位置"));
-        c.addView(locationRow(p, R.drawable.ic_phone, "手機", null, FileOps.PHONE, holder, null));
-        c.addView(locationRow(p, R.drawable.ic_download, "Download", null, FileOps.DOWNLOADS, holder, null));
+
+        c.addView(overlay.sectionLabel("儲存空間"));
+        List<Storage.Volume> vols = Storage.volumes(this);
+        for (Storage.Volume v : vols) c.addView(volumeRow(p, v, holder));
+        if (vols.size() == 1) {
+            TextView none = Ui.text(this, "沒有偵測到記憶卡或 USB 隨身碟。插入後會出現在這裡。", 13.5f, Ui.muted);
+            none.setPadding(Ui.dp(24), Ui.dp(2), Ui.dp(24), Ui.dp(8));
+            c.addView(none);
+        }
+
+        List<String> marks = Settings.bookmarks(this);
+        if (!marks.isEmpty()) {
+            c.addView(overlay.sectionLabel("書籤"));
+            for (final String path : marks) {
+                ImageView more = Ui.iconButton(this, R.drawable.ic_more, "「" + p.label(path) + "」的選項", Ui.muted, null);
+                more.setOnClickListener(v -> overlay.new Menu(v).item("移除書籤", false, () -> {
+                    Settings.toggleBookmark(this, path);
+                    holder[0].dismiss();
+                    snack("已移除書籤「" + p.label(path) + "」");
+                }).show());
+                String where = displayPath(parent(path));
+                c.addView(locationRow(p, R.drawable.ic_bookmark, p.label(path), where, path, holder, more));
+            }
+        }
+
         c.addView(overlay.sectionLabel("連線"));
         for (Map.Entry<String, String> r : remotes.entrySet()) {
             final String remote = r.getKey();
@@ -1263,13 +1360,34 @@ public class MainActivity extends Activity implements PaneView.Host {
         holder[0] = overlay.new Sheet(scroll(c)).show();
     }
 
-    private View locationRow(PaneView p, int icon, String title, String subtitle, String target, Overlay.Sheet[] holder, View trailing) {
-        boolean current = p.path.equals(target) || (isAncestor(target, p.path) && !(target.equals(FileOps.PHONE) && p.path.startsWith(FileOps.DOWNLOADS)));
-        if (target.equals(FileOps.PHONE)) current = FileOps.isLocal(p.path) && !p.path.equals(FileOps.DOWNLOADS) && !isAncestor(FileOps.DOWNLOADS, p.path);
-        if (current && trailing == null) {
-            trailing = Ui.icon(this, R.drawable.ic_check, Ui.primary);
-            trailing.setLayoutParams(new LinearLayout.LayoutParams(Ui.dp(22), Ui.dp(22)));
+    /** Storage row with free space and a usage bar. */
+    private View volumeRow(PaneView p, Storage.Volume v, Overlay.Sheet[] holder) {
+        String space = v.total > 0 ? "可用 " + FileOps.size(v.free) + "，共 " + FileOps.size(v.total) : null;
+        boolean here = localRoot(p.path).equals(v.root);
+        LinearLayout row = overlay.sheetRow(Storage.icon(v.kind), here ? Ui.primary : Ui.primaryContainer, here ? Ui.onPrimary : Ui.primary,
+                v.label, space, null, x -> { holder[0].dismiss(); if (!p.path.equals(v.root)) load(p, v.root, isAncestor(v.root, p.path) ? -1 : 1); });
+        if (v.total > 0) {
+            LinearLayout texts = (LinearLayout) row.getChildAt(1);
+            android.widget.ProgressBar bar = new android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+            bar.setMax(1000);
+            bar.setProgress((int) (1000 * (v.total - v.free) / Math.max(1, v.total)));
+            bar.setProgressTintList(android.content.res.ColorStateList.valueOf(Ui.primary));
+            bar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Ui.alpha(Ui.primary, .18f)));
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, Ui.dp(4));
+            bp.topMargin = Ui.dp(6);
+            texts.addView(bar, bp);
         }
+        if (here) {
+            row.setContentDescription(v.label + "，目前位置" + (space == null ? "" : "，" + space));
+            ((TextView) ((LinearLayout) row.getChildAt(1)).getChildAt(0)).setTypeface(Ui.medium);
+        }
+        return row;
+    }
+
+    private View locationRow(PaneView p, int icon, String title, String subtitle, String target, Overlay.Sheet[] holder, View trailing) {
+        // Connections mark the one the window is inside; bookmarks only mark an exact match, so a
+        // folder and its bookmarked parent are never highlighted at the same time.
+        boolean current = target.endsWith(":") ? p.path.equals(target) || isAncestor(target, p.path) : p.path.equals(target);
         LinearLayout row = overlay.sheetRow(icon, current ? Ui.primary : Ui.primaryContainer, current ? Ui.onPrimary : Ui.primary, title, subtitle, trailing,
                 v -> { holder[0].dismiss(); if (!p.path.equals(target)) load(p, target, isAncestor(target, p.path) ? -1 : 1); });
         if (current) {
@@ -1282,7 +1400,7 @@ public class MainActivity extends Activity implements PaneView.Host {
     void removeRemote(String remote, Overlay.Sheet sheet) {
         if (TransferService.busy()) { message(null, "等傳輸完成再移除連線。"); return; }
         String name = rootLabel(remote);
-        overlay.new Dialog("移除「" + name + "」？", "只會移除這支手機上的連線設定，伺服器上的檔案不受影響。要改帳號或密碼，可以移除後重新新增。")
+        overlay.new Dialog("移除「" + name + "」？", "只會移除這支手機上的連線設定，NAS 或雲端上的檔案不受影響。要改帳號或密碼，可以移除後重新新增。")
                 .action("取消", Ui.ButtonStyle.TEXT, null)
                 .action("移除連線", Ui.ButtonStyle.DANGER, () -> {
                     if (sheet != null) sheet.dismiss();
@@ -1312,7 +1430,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         c.addView(overlay.sheetRow(R.drawable.ic_server, Ui.primaryContainer, Ui.primary, "SMB", "多數 NAS 與 Windows 共用資料夾", null, v -> { holder[0].dismiss(); remoteForm(0); }));
         c.addView(overlay.sheetRow(R.drawable.ic_server, Ui.primaryContainer, Ui.primary, "SFTP", "可用 SSH 登入的電腦或伺服器", null, v -> { holder[0].dismiss(); remoteForm(1); }));
         c.addView(overlay.sheetRow(R.drawable.ic_cloud, Ui.primaryContainer, Ui.primary, "WebDAV", "用網址連線，例如 Nextcloud", null, v -> { holder[0].dismiss(); remoteForm(2); }));
-        c.addView(overlay.sheetRow(R.drawable.ic_upload_file, Ui.surfaceHigh, Ui.ink, "匯入 rclone 設定檔", "從設定檔加入 Google 雲端硬碟、OneDrive 等連線", null, v -> { holder[0].dismiss(); importConfig(); }));
+        c.addView(overlay.sheetRow(R.drawable.ic_download, Ui.surfaceHigh, Ui.ink, "匯入 rclone 設定檔", "Google 雲端硬碟、OneDrive 等服務用這個加入；會取代目前所有連線", null, v -> { holder[0].dismiss(); importConfig(); }));
         View pad = new View(this);
         c.addView(pad, new LinearLayout.LayoutParams(-1, Ui.dp(12)));
         holder[0] = overlay.new Sheet(scroll(c)).show();
@@ -1402,7 +1520,7 @@ public class MainActivity extends Activity implements PaneView.Host {
     }
 
     void importConfig() {
-        if (TransferService.busy()) { message(null, "等傳輸完成再匯入設定。"); return; }
+        if (TransferService.busy()) { message(null, "傳輸進行中，等完成後再匯入設定檔。"); return; }
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
         try { startActivityForResult(i, 41); } catch (Exception e) { message(null, "手機裡沒有能選擇檔案的 App。"); }
     }
@@ -1413,13 +1531,13 @@ public class MainActivity extends Activity implements PaneView.Host {
         if (req != 41 || result != RESULT_OK || data == null || data.getData() == null) return;
         final Uri uri = data.getData();
         if (remotes.isEmpty()) { runImport(uri); return; }
-        overlay.new Dialog("匯入這份設定檔？", "目前的 " + remotes.size() + " 個連線會被設定檔裡的連線取代。")
+        overlay.new Dialog("匯入這份設定檔？", "目前的 " + remotes.size() + " 個連線會被設定檔裡的連線取代。要保留目前的連線，請先到設定匯出備份。")
                 .action("取消", Ui.ButtonStyle.TEXT, null)
                 .action("取代並匯入", Ui.ButtonStyle.FILLED, () -> runImport(uri)).show();
     }
 
     private void runImport(final Uri uri) {
-        if (TransferService.busy()) { message(null, "等傳輸完成再匯入設定。"); return; }
+        if (TransferService.busy()) { message(null, "傳輸進行中，等完成後再匯入設定檔。"); return; }
         final Overlay.Dialog progress = busyDialog("正在讀取設定…");
         worker.execute(() -> {
             try {
@@ -1427,18 +1545,9 @@ public class MainActivity extends Activity implements PaneView.Host {
                 handler.post(() -> {
                     if (isDestroyed() || isFinishing()) return;
                     progress.dismiss();
-                    clipboard.clear();
-                    for (PaneView p : panes) {
-                        ++p.generation;
-                        p.setLoading(false);
-                        p.error = "";
-                        p.failed = "";
-                        p.selected.clear();
-                        if (!FileOps.isLocal(p.path)) { p.path = FileOps.PHONE; p.entries = new ArrayList<>(); }
-                        load(p, p.path, 0);
-                    }
-                    reloadRemotes();
-                    updateBars();
+                    configStamp = System.currentTimeMillis();
+                    Settings.prefs(this).edit().putLong(Settings.CONFIG_STAMP, configStamp).apply();
+                    afterConfigReplaced();
                     snack("已匯入 " + count + " 個連線");
                 });
             } catch (Exception e) {
@@ -1451,6 +1560,22 @@ public class MainActivity extends Activity implements PaneView.Host {
         });
     }
 
+    /** After the connection list is replaced, drop anything that pointed at the old connections. */
+    void afterConfigReplaced() {
+        clipboard.clear();
+        for (PaneView p : panes) {
+            ++p.generation;
+            p.setLoading(false);
+            p.error = "";
+            p.failed = "";
+            p.selected.clear();
+            if (!FileOps.isLocal(p.path)) { p.path = FileOps.PHONE; p.entries = new ArrayList<>(); }
+            load(p, p.path, 0);
+        }
+        reloadRemotes();
+        updateBars();
+    }
+
     // ============================================================================================
     // Menu
 
@@ -1461,23 +1586,18 @@ public class MainActivity extends Activity implements PaneView.Host {
         m.item("新增資料夾", false, () -> newFolder(p));
         m.item("輸入路徑", false, () -> enterPath(p));
         m.item("重新整理", false, () -> load(p, p.path, 0));
+        final boolean marked = Settings.isBookmarked(this, p.path);
+        m.item(marked ? "移除書籤" : "加入書籤", false, () -> {
+            Settings.toggleBookmark(this, p.path);
+            snack(marked ? "已移除書籤「" + p.label(p.path) + "」" : "已加入書籤「" + p.label(p.path) + "」，點左上角的位置圖示就能前往");
+        });
         m.divider();
         m.add(sortPicker());
         m.add(hiddenToggle());
         m.divider();
         m.item("傳輸紀錄", false, this::showTransfers);
-        if (needsAccess(FileOps.PHONE) || notificationsBlocked()) m.item("檔案與通知權限", false, this::requestAllPermissions);
-        m.item("關於", false, this::about);
+        m.item("設定", false, () -> startActivity(new Intent(this, SettingsActivity.class)));
         m.show();
-    }
-
-    private boolean notificationsBlocked() {
-        return Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED;
-    }
-
-    private void requestAllPermissions() {
-        if (needsAccess(FileOps.PHONE)) requestAccess();
-        if (notificationsBlocked()) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 43);
     }
 
     private View modePicker(Overlay.Menu menu) {
@@ -1565,6 +1685,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         r.setContentDescription(hidden ? "顯示隱藏檔，已開啟" : "顯示隱藏檔，已關閉");
         r.setOnClickListener(v -> {
             hidden = !hidden;
+            Settings.prefs(this).edit().putBoolean(Settings.HIDDEN, hidden).apply();
             paint.run();
             r.setContentDescription(hidden ? "顯示隱藏檔，已開啟" : "顯示隱藏檔，已關閉");
             for (PaneView p : panes) p.refresh();
@@ -1592,39 +1713,6 @@ public class MainActivity extends Activity implements PaneView.Host {
         });
         d.show();
         Overlay.showKeyboard(edit);
-    }
-
-    void about() {
-        command(() -> FileOps.version(this), r -> {
-            String engine = r.code == 0 && !r.out.isEmpty() ? r.out.split("\n")[0].trim().replaceFirst("-[A-Za-z].*$", "") : "rclone";
-            overlay.new Dialog("Rclone Browser Next", "手機版 " + versionName() + "\n傳輸引擎：" + engine)
-                    .action("授權說明", Ui.ButtonStyle.TEXT, this::licenses)
-                    .action("關閉", Ui.ButtonStyle.TONAL, null).show();
-        });
-    }
-
-    private String versionName() {
-        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return ""; }
-    }
-
-    private void licenses() {
-        StringBuilder text = new StringBuilder();
-        for (String name : new String[]{"THIRD-PARTY.txt", "RCLONE-LICENSE.txt"}) {
-            try (InputStream in = getAssets().open(name)) {
-                java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = in.read(buf)) > 0) b.write(buf, 0, n);
-                text.append(b.toString("UTF-8")).append("\n\n");
-            } catch (Exception ignored) {}
-        }
-        LinearLayout c = Ui.column(this);
-        c.addView(overlay.sheetTitle("授權說明"));
-        TextView t = Ui.text(this, text.toString().trim(), 12.5f, Ui.muted);
-        t.setTextIsSelectable(true);
-        t.setPadding(Ui.dp(24), 0, Ui.dp(24), Ui.dp(24));
-        c.addView(t);
-        overlay.new Sheet(scroll(c)).show();
     }
 
     // ============================================================================================
@@ -1762,6 +1850,17 @@ public class MainActivity extends Activity implements PaneView.Host {
         message(null, e.getMessage() == null ? "操作沒有完成，請再試一次。" : e.getMessage());
     }
 
+    /** When the setting is on and the phone is on mobile data, confirm before a network transfer. */
+    void whenNetworkOk(boolean usesNetwork, Runnable go) {
+        android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
+        android.net.NetworkCapabilities caps = cm == null ? null : cm.getNetworkCapabilities(cm.getActiveNetwork());
+        boolean cellular = caps != null && caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR);
+        if (!usesNetwork || !cellular || !Settings.askMobileData(this)) { go.run(); return; }
+        overlay.new Dialog("要用行動數據傳輸嗎？", "手機目前使用行動數據，大檔案可能用掉不少流量。")
+                .action("取消", Ui.ButtonStyle.TEXT, null)
+                .action("仍要傳輸", Ui.ButtonStyle.FILLED, go).show();
+    }
+
     // ============================================================================================
     // Back
 
@@ -1772,6 +1871,10 @@ public class MainActivity extends Activity implements PaneView.Host {
         if (!p.selected.isEmpty()) { p.clearSelection(); return; }
         if (!p.error.isEmpty() && p.loadedOnce) { p.error = ""; p.failed = ""; p.refresh(); return; }
         if (!isRoot(p.path)) { load(p, parent(p.path), -1); return; }
+        if (Settings.backExit(this) == Settings.BACK_EXIT_TWICE) {
+            long now = SystemClock.elapsedRealtime();
+            if (now - backPressedAt > 2000) { backPressedAt = now; snack("再按一次返回鍵離開"); return; }
+        }
         super.onBackPressed();
     }
 

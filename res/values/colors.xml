@@ -27,6 +27,8 @@
     <color name="ripple">#1F1D1B20</color>
     <color name="scrim">#52000000</color>
     <color name="launcher_bg">#F6F1FA</color>
+    <color name="launcher_bg_blue">#EEF3FA</color>
+    <color name="launcher_bg_green">#EEF4F0</color>
     <color name="split_bar">#76558F</color>
     <color name="on_split_bar">#FFFFFF</color>
 

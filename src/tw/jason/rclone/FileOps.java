@@ -48,7 +48,7 @@ final class FileOps {
             for (File f : fs) entries.add(new Entry(f.getName(), f.getAbsolutePath(), f.isDirectory(), f.length(), f.lastModified()));
             return entries;
         }
-        Rclone.Result r = Rclone.run(c, "lsjson", "--contimeout", "10s", "--timeout", "20s", "--retries", "1", "--low-level-retries", "1", "--", destination);
+        Rclone.Result r = Rclone.run(c, "lsjson", "--contimeout", Settings.listConnectTimeout(c), "--timeout", Settings.listIdleTimeout(c), "--retries", "1", "--low-level-retries", "1", "--", destination);
         if (r.code != 0) throw new IOException(friendlyError(r.err));
         try {
             JSONArray items = new JSONArray(r.out);

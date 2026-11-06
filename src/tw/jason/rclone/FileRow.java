@@ -70,7 +70,7 @@ final class FileRow extends LinearLayout {
     static int[] tile(Context c, Kind k) {
         int bg, fg;
         switch (k) {
-            case FOLDER: bg = R.color.tile_folder_bg; fg = R.color.tile_folder_fg; break;
+            case FOLDER: return new int[]{Ui.folderBg, Ui.folderFg};
             case IMAGE: bg = R.color.tile_image_bg; fg = R.color.tile_image_fg; break;
             case VIDEO: bg = R.color.tile_video_bg; fg = R.color.tile_video_fg; break;
             case AUDIO: bg = R.color.tile_audio_bg; fg = R.color.tile_audio_fg; break;
@@ -132,7 +132,11 @@ final class FileRow extends LinearLayout {
         private static final Handler MAIN = new Handler(Looper.getMainLooper());
         private static final java.util.Set<String> FAILED = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
 
+        /** Set from Settings; off skips decoding previews entirely. */
+        static volatile boolean enabled = true;
+
         static boolean eligible(FileOps.Entry e) {
+            if (!enabled) return false;
             if (e.dir || !FileOps.isLocal(e.path)) return false;
             Kind k = kind(e);
             return k == Kind.IMAGE || (k == Kind.VIDEO && Build.VERSION.SDK_INT >= 29);
@@ -178,6 +182,9 @@ final class FileRow extends LinearLayout {
 
     // ---- The row view -------------------------------------------------------------------------
 
+    /** Compact rows from Settings; the screen is rebuilt when it changes. */
+    static boolean dense;
+
     final FrameLayout tile;
     final ImageView glyph, thumb, check;
     final TextView name, meta;
@@ -188,8 +195,8 @@ final class FileRow extends LinearLayout {
         super(c);
         setOrientation(HORIZONTAL);
         setGravity(Gravity.CENTER_VERTICAL);
-        setMinimumHeight(Ui.dp(60));
-        setPadding(Ui.dp(12), Ui.dp(6), Ui.dp(16), Ui.dp(6));
+        setMinimumHeight(Ui.dp(dense ? 50 : 60));
+        setPadding(Ui.dp(12), Ui.dp(dense ? 3 : 6), Ui.dp(16), Ui.dp(dense ? 3 : 6));
 
         tile = new FrameLayout(c);
         glyph = new ImageView(c);
@@ -205,7 +212,7 @@ final class FileRow extends LinearLayout {
         check.setVisibility(GONE);
         tile.addView(check, Ui.frame(-1, -1, Gravity.CENTER));
         Ui.clipRound(tile, 12);
-        LayoutParams tp = new LayoutParams(Ui.dp(40), Ui.dp(40));
+        LayoutParams tp = new LayoutParams(Ui.dp(dense ? 34 : 40), Ui.dp(dense ? 34 : 40));
         tp.rightMargin = Ui.dp(16);
         addView(tile, tp);
 
