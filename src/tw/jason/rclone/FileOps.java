@@ -72,6 +72,8 @@ final class FileOps {
     /** Maps engine error text to a short reason. Raw engine text can contain hosts or tokens, so it is never shown. */
     static String friendlyError(String e) {
         String s = e == null ? "" : e.toLowerCase();
+        // 0.7.1: the destination refused a name (memory cards reject some characters).
+        if (s.contains("invalid argument")) return "目的地不接受這個名稱，資料夾或檔案沒有建立。";
         if (s.contains("too_long")) return "超過 App 的等待時間，已經停止，不一定是連線問題。項目很多時，請改用裡面較小的資料夾。";
         if (s.contains("permission denied") || s.contains("access denied") || s.contains("403")) return "沒有存取權限，請確認帳號與資料夾權限。";
         if (s.contains("not found") || s.contains("not exist")) return "找不到這個位置。";

@@ -13,7 +13,7 @@ export JAVA_HOME=/path/to/jdk
 
 更新腳本從 rclone 官方下載 Android ARM64 執行檔，檢查架構與內嵌版本，再放入 `lib/arm64-v8a/librclone.so`。引擎來源見 `assets/THIRD-PARTY.txt`。`engine.sha256` 記錄檔案指紋，建置時會核對。
 
-輸出為 `dist/RcloneNext-0.7.0-arm64.apk`。若同名輸出已存在，腳本會停止；設定 `ALLOW_REBUILD=1` 才會覆寫。
+輸出為 `dist/RcloneNext-0.7.4-arm64.apk`。若同名輸出已存在，腳本會停止；設定 `ALLOW_REBUILD=1` 才會覆寫。
 
 ## 簽章
 

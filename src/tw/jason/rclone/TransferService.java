@@ -250,6 +250,18 @@ public final class TransferService extends Service {
         java.lang.Process owned=null;
         long transferred=-1;
         try {
+            // 0.7.4: a single file whose name a memory card cannot keep is not copied (the card would shorten the name).
+            List<String> cardFilters=Settings.cardNameFilters(job.dst);
+            if(!job.directory && !cardFilters.isEmpty() && Settings.cardRefuses(nameOf(job.dst))) {
+                job.report.skipped(nameOf(job.src),Settings.CARD_REFUSES);
+                synchronized(LOCK) {
+                    job.ended=System.currentTimeMillis();
+                    saveDetails(this,job);
+                    status="記憶卡存不了這個名稱，沒有複製 · "+job.name();
+                    record(this,job,"失敗（記憶卡存不了這個名稱）");
+                }
+                return;
+            }
             ArrayList<String> args=new ArrayList<>();
             args.add(job.sync?"sync":job.move?(job.directory?"move":"moveto"):(job.directory?"copy":"copyto"));
             if(job.directory) args.add("--create-empty-src-dirs");
@@ -264,9 +276,10 @@ public final class TransferService extends Service {
             // (4 transfers, 8 checkers, no bandwidth limit, 15 s connect and 60 s idle timeouts).
             // 0.7.0: INFO level ("-v") reports each file copied, replaced, moved or deleted, and "--combined -"
             // prints one line per file with the comparison result; TransferReport reads both.
-            Collections.addAll(args,"--transfers",String.valueOf(job.transfers),"--checkers",String.valueOf(job.checkers),"--stats","1s","--stats-one-line","--use-json-log","--stats-log-level","NOTICE","-v","--combined","-","--retries","2","--low-level-retries","3","--contimeout",Settings.connectTimeout(this),"--timeout",Settings.idleTimeout(this));
+            Collections.addAll(args,"--transfers",String.valueOf(job.transfers),"--checkers",String.valueOf(job.checkers),"--stats","1s","--stats-one-line","--use-json-log","--stats-log-level","NOTICE","-v","--combined","-","--retries","1","--low-level-retries","3","--contimeout",Settings.connectTimeout(this),"--timeout",Settings.idleTimeout(this));
             int bandwidth=Settings.bandwidthMB(this);
             if(bandwidth>0) Collections.addAll(args,"--bwlimit",bandwidth+"M");
+            if(job.directory && !cardFilters.isEmpty()) { args.addAll(cardFilters); job.report.cardNamesLeftOut(); }
             Collections.addAll(args,"--",job.src,job.dst);
             synchronized(LOCK) {
                 if(job.cancelled || destroyed) {record(this,job,"已取消"); return;}
@@ -274,10 +287,20 @@ public final class TransferService extends Service {
             }
             updateNotice();
             long lastSaved=SystemClock.elapsedRealtime();
-            try(BufferedReader reader=new BufferedReader(new InputStreamReader(owned.getInputStream(),StandardCharsets.UTF_8))) {
+            // 0.7.2: for "make identical", every destination-only path goes to a list file, and the folders that
+            // exist in the source are noted, so the deletions rclone skips after single-file errors can still be done.
+            File onlyDstList=job.sync ? new File(getCacheDir(),"only-dst-"+job.id.replaceAll("[^A-Za-z0-9-]","")+".txt") : null;
+            HashSet<String> sourceDirs=new HashSet<>();
+            try(BufferedReader reader=new BufferedReader(new InputStreamReader(owned.getInputStream(),StandardCharsets.UTF_8));
+                Writer listOut=onlyDstList==null ? null : new BufferedWriter(new OutputStreamWriter(new FileOutputStream(onlyDstList),StandardCharsets.UTF_8))) {
                 String line;
                 while((line=reader.readLine())!=null) {
                     if(job.cancelled) { owned.destroyForcibly(); continue; }
+                    if(listOut!=null && line.length()>2 && line.charAt(1)==' ') {
+                        char k=line.charAt(0);
+                        if(k=='-') { listOut.write(line,2,line.length()-2); listOut.write('\n'); }
+                        else if(k=='=' || k=='+' || k=='*' || k=='!') for(String d=parentOf(line.substring(2));!d.isEmpty() && sourceDirs.add(d);d=parentOf(d)) {}
+                    }
                     // Engine error text is only shown cleaned (see TransferReport); the notification never has it.
                     JSONObject before=job.report.stats();
                     job.report.read(line);
@@ -298,6 +321,9 @@ public final class TransferService extends Service {
                 }
             }
             int exit=owned.waitFor();
+            if(exit!=0 && !job.cancelled && job.sync && job.directory && job.report.canCleanAnyway()) cleanUpAnyway(job,onlyDstList,sourceDirs);
+            if(onlyDstList!=null) onlyDstList.delete();
+            if(job.directory && !cardFilters.isEmpty() && !job.cancelled) listCardRefused(job);
             if(exit==0 && !job.cancelled) job.timeNotKept=timeCheck(job);
             synchronized(LOCK) {
                 job.ended=System.currentTimeMillis();
@@ -316,6 +342,126 @@ public final class TransferService extends Service {
             }
         } finally { if(owned!=null && owned.isAlive()) owned.destroyForcibly(); }
     }
+    static String parentOf(String path) { int i=path.lastIndexOf('/'); return i<0 ? "" : path.substring(0,i); }
+
+    static String nameOf(String path) {
+        String p=path.endsWith("/") ? path.substring(0,path.length()-1) : path;
+        int i=Math.max(p.lastIndexOf('/'),p.lastIndexOf(':'));
+        return p.substring(i+1);
+    }
+
+    /**
+     * 0.7.2, folders added in 0.7.4. rclone deletes nothing when any error happened, because a folder it could not
+     * read would look empty and its files would be deleted by mistake. When every error was about a single file
+     * (for example a name the memory card refuses), both sides were listed completely, so the clean-up rclone
+     * skipped is done here:
+     * 1. Destination-only files from that complete comparison are deleted with "rclone delete --files-from-raw".
+     * 2. Folders only in the destination are removed, deepest first, if empty. rclone itself removes these after a
+     *    run without errors, empty ones included; up to 0.7.3 only folders emptied by step 1 were removed, so
+     *    folders that were already empty stayed.
+     *    A destination folder is "only in the destination" when no source file is in it and a listing of its
+     *    parent in the source does not show it either (the source can have empty folders).
+     * Nothing is renamed.
+     */
+    private void cleanUpAnyway(Job job,File list,Set<String> sourceDirs) {
+        java.lang.Process p=null;
+        try {
+            if(list!=null && list.isFile() && list.length()>0) {
+                status="正在刪除目的地多出的檔案 · "+job.name();
+                updateNotice();
+                ArrayList<String> args=new ArrayList<>();
+                Collections.addAll(args,"delete","--files-from-raw",list.getAbsolutePath(),"--use-json-log","-v","--stats","0","--retries","1","--low-level-retries","3","--contimeout",Settings.connectTimeout(this),"--timeout",Settings.idleTimeout(this),"--",job.dst);
+                synchronized(LOCK) { if(job.cancelled) return; p=Rclone.start(this,args); process=p; }
+                try(BufferedReader r=new BufferedReader(new InputStreamReader(p.getInputStream(),StandardCharsets.UTF_8))) {
+                    String line;
+                    while((line=r.readLine())!=null) { if(job.cancelled) p.destroyForcibly(); else job.report.read(line); }
+                }
+                p.waitFor();
+            }
+            if(job.cancelled) return;
+            status="正在清理目的地多出的資料夾 · "+job.name();
+            updateNotice();
+            boolean local=FileOps.isLocal(job.dst);
+            TreeSet<String> dstDirs=local ? localDirs(new File(job.dst)) : remoteDirs(job.dst);
+            ArrayList<String> removed=new ArrayList<>();
+            if(dstDirs==null) { job.report.cleanedAnyway(removed,0,0); return; }
+            TreeSet<String> extra=new TreeSet<>();
+            for(String d:dstDirs) if(!sourceDirs.contains(d)) extra.add(d);
+            // The top-most of them, by parent: one listing of each parent in the source.
+            TreeMap<String,ArrayList<String>> byParent=new TreeMap<>();
+            for(String d:extra) if(!extra.contains(parentOf(d))) { String pa=parentOf(d); if(!byParent.containsKey(pa)) byParent.put(pa,new ArrayList<>()); byParent.get(pa).add(d); }
+            HashSet<String> inSource=new HashSet<>();
+            int calls=0;
+            for(Map.Entry<String,ArrayList<String>> e:byParent.entrySet()) {
+                if(job.cancelled) return;
+                // Unknown (listing failed, or too many parents to ask): treated as present, so nothing there is removed.
+                Set<String> names=calls++<200 ? sourceSubdirs(job.src,e.getKey()) : null;
+                for(String d:e.getValue()) if(names==null || names.contains(d.substring(d.lastIndexOf('/')+1))) inSource.add(d);
+            }
+            TreeSet<String> deepestFirst=new TreeSet<>((a,b)->{ int da=depth(a),db=depth(b); return da!=db ? db-da : a.compareTo(b); });
+            deepestFirst.addAll(extra);
+            long kept=0;
+            int rmdirs=0;
+            for(String d:deepestFirst) {
+                if(job.cancelled) break;
+                boolean protectedDir=false;
+                for(String a=d;!a.isEmpty();a=parentOf(a)) if(inSource.contains(a)) { protectedDir=true; break; }
+                boolean gone=!protectedDir && (local ? new File(job.dst,d).delete() : rmdirs++<300 && Rclone.run(this,60,"rmdir","--",join(job.dst,d)).code==0);
+                if(gone) removed.add(d); else kept++;
+            }
+            job.report.cleanedAnyway(removed,extra.size(),kept);
+        } catch(Exception ignored) {
+        } finally { if(p!=null && p.isAlive()) p.destroyForcibly(); }
+    }
+    private static int depth(String path) { int n=0; for(int i=0;i<path.length();i++) if(path.charAt(i)=='/') n++; return n; }
+
+    /** Every folder under a local folder, as paths relative to it; symbolic links are not followed. */
+    static TreeSet<String> localDirs(File root) {
+        final TreeSet<String> out=new TreeSet<>();
+        final java.nio.file.Path base=root.toPath();
+        try {
+            java.nio.file.Files.walkFileTree(base,new java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+                @Override public java.nio.file.FileVisitResult preVisitDirectory(java.nio.file.Path d,java.nio.file.attribute.BasicFileAttributes a) {
+                    if(!d.equals(base)) out.add(base.relativize(d).toString());
+                    return java.nio.file.FileVisitResult.CONTINUE;
+                }
+                @Override public java.nio.file.FileVisitResult visitFileFailed(java.nio.file.Path f,IOException e) { return java.nio.file.FileVisitResult.CONTINUE; }
+            });
+        } catch(IOException e) { return null; }
+        return out;
+    }
+    /** Every folder under a remote folder, from rclone; null if the listing was not complete. */
+    private TreeSet<String> remoteDirs(String dst) {
+        Rclone.Result r=Rclone.run(this,900,"lsf","-R","--dirs-only","--dir-slash=false","--contimeout",Settings.connectTimeout(this),"--timeout",Settings.idleTimeout(this),"--",dst);
+        if(r.code!=0) return null;
+        TreeSet<String> out=new TreeSet<>();
+        for(String line:r.out.split("\n")) if(!line.isEmpty()) out.add(line);
+        return out;
+    }
+    /** Names of the folders directly in {@code parent} of the source; null if it could not be listed. */
+    private Set<String> sourceSubdirs(String src,String parent) {
+        Rclone.Result r=Rclone.run(this,120,"lsf","--max-depth","1","--dirs-only","--dir-slash=false","--contimeout",Settings.connectTimeout(this),"--timeout",Settings.idleTimeout(this),"--",parent.isEmpty() ? src : join(src,parent));
+        if(r.code!=0) return null;
+        HashSet<String> out=new HashSet<>();
+        for(String line:r.out.split("\n")) if(!line.isEmpty()) out.add(line);
+        return out;
+    }
+
+    /**
+     * 0.7.4. The names this transfer left out because a memory card cannot keep them (Settings.cardNameFilters):
+     * rclone does not report filtered names, so the top level of the source is listed once (one folder listing,
+     * cheap even on a NAS) and the names there that end in a period or space are listed. Deeper ones are left out
+     * the same way; the detail page says they are not listed one by one.
+     */
+    private void listCardRefused(Job job) {
+        Rclone.Result r=Rclone.run(this,120,"lsf","--max-depth","1","--contimeout",Settings.connectTimeout(this),"--timeout",Settings.idleTimeout(this),"--",job.src);
+        if(r.code!=0) return;
+        for(String line:r.out.split("\n")) {
+            String name=line.endsWith("/") ? line.substring(0,line.length()-1) : line;
+            if(!name.isEmpty() && Settings.cardRefuses(name)) job.report.skipped(line,Settings.CARD_REFUSES);
+        }
+    }
+
     /** Comparison flags and time tolerance for "make identical" with the method fixed when the job started. */
     private List<String> compareArgs(Job job) {
         List<String> a=Settings.compareFlags(job.compare);

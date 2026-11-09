@@ -96,6 +96,13 @@ final class Storage {
         return best;
     }
 
+    /** "記憶卡/Download/example": the volume's name, then the path inside it (0.7.2). */
+    static String label(Context c, String path) {
+        Volume v = volumeFor(c, path);
+        if (v == null) return path;
+        return v.label + path.substring(v.root.length());
+    }
+
     static int icon(int kind) {
         switch (kind) {
             case CARD: return R.drawable.ic_sd_card;

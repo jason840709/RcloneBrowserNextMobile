@@ -177,6 +177,7 @@ public class SettingsActivity extends Activity {
         switchRow("用行動數據傳輸前先詢問", "要傳的檔案在 NAS 或雲端連線上、而手機正在使用行動數據時，先跳出確認。",
                 Settings.askMobileData(this), on -> Settings.prefs(this).edit().putBoolean(Settings.ASK_MOBILE, on).apply());
         note("傳輸設定從下一個開始的傳輸生效，進行中的傳輸不受影響。");
+        actionRow("清理 0.7.1 多寫的重複檔案", "0.7.1 把名稱含全形「？」「：」等字元的檔案另存了一份，名稱多了「‛」。這裡找出這些重複的並刪除；原本名稱的那份不會動。", this::cleanDuplicates);
 
         section("連線設定檔");
         actionRow("匯入 rclone 設定檔", "用設定檔裡的連線取代目前所有連線。", this::startImport);
@@ -323,6 +324,45 @@ public class SettingsActivity extends Activity {
     }
 
     /** 0.7.0: comparison method; the chooser is shared with the sync sheet and the transfer detail page. */
+    /** 0.7.2: finds 0.7.1's duplicates under the local destinations of past transfers, then deletes them after confirmation. */
+    private void cleanDuplicates() {
+        final java.util.List<File> roots = DuplicateCleanup.roots(this);
+        if (roots.isEmpty()) { message("傳輸紀錄裡沒有手機或記憶卡上的目的地資料夾，沒有可以檢查的地方。"); return; }
+        LinearLayout box = Ui.column(this);
+        final TextView count = Ui.text(this, "正在檢查…", 14.5f, Ui.muted);
+        box.addView(new TransferUi.Ring(this, Ui.primary), new LinearLayout.LayoutParams(Ui.dp(28), Ui.dp(28)));
+        ((TransferUi.Ring) box.getChildAt(0)).setFraction(-1);
+        box.addView(count);
+        final Overlay.Dialog wait = overlay.new Dialog("正在找重複的檔案", null).view(box);
+        final java.util.concurrent.Future<?>[] task = new java.util.concurrent.Future<?>[1];
+        wait.action("停止", Ui.ButtonStyle.TEXT, () -> { if (task[0] != null) task[0].cancel(true); });
+        wait.cancelable = false;
+        wait.show();
+        task[0] = worker.submit(() -> {
+            DuplicateCleanup.Result r = DuplicateCleanup.scan(roots, n -> handler.post(() -> count.setText("已檢查 " + MainActivity.count(n) + " 項")));
+            if (Thread.currentThread().isInterrupted()) { handler.post(wait::dismiss); return; }
+            handler.post(() -> { wait.dismiss(); showDuplicates(roots, r); });
+        });
+    }
+
+    private void showDuplicates(java.util.List<File> roots, DuplicateCleanup.Result r) {
+        StringBuilder where = new StringBuilder();
+        for (File f : roots) where.append(where.length() > 0 ? "、" : "").append("「").append(Storage.label(this, f.getAbsolutePath())).append("」");
+        String later = r.withoutOriginal.isEmpty() ? "" : "\n\n另有 " + MainActivity.count(r.withoutOriginal.size()) + " 項還找不到原本名稱的那份，這次不刪；先用「讓目的地和來源一模一樣」同步一次補上原本的，再回來清理。";
+        if (r.duplicates.isEmpty()) { message("在" + where + "沒有找到可以刪除的重複項目。" + later); return; }
+        StringBuilder ex = new StringBuilder();
+        for (int i = 0; i < Math.min(3, r.duplicates.size()); i++) ex.append("\n・").append(r.duplicates.get(i).getName());
+        String what = (r.folders > 0 ? MainActivity.count(r.folders) + " 個重複資料夾" : "") + (r.folders > 0 && r.files > 0 ? "、" : "") + (r.files > 0 ? MainActivity.count(r.files) + " 個重複檔案" : "");
+        String body = "在" + where + "找到 " + what + "，原本名稱的那份都在。例如：" + ex
+                + "\n\n只刪這裡重複的那份，刪除後無法復原；來源（例如 NAS）上的檔案不受影響。" + later;
+        overlay.new Dialog("刪除 0.7.1 多寫的重複項目？", body)
+                .action("取消", Ui.ButtonStyle.TEXT, null)
+                .action("刪除 " + MainActivity.count(r.duplicates.size()) + " 項", Ui.ButtonStyle.DANGER, () -> worker.submit(() -> {
+                    long n = DuplicateCleanup.delete(r.duplicates);
+                    handler.post(() -> snack("已刪除 " + MainActivity.count(n) + " 個重複的檔案和資料夾"));
+                })).show();
+    }
+
     private void compareRow() {
         LinearLayout r = baseRow("比對方式");
         final TextView value = subtitle(r, Settings.compareName(Settings.compare(this)));

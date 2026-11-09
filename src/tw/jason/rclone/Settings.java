@@ -115,6 +115,32 @@ public final class Settings {
         return "";
     }
 
+    // 0.7.1 stored names a memory card cannot hold (? : * " < > | …) as full-width look-alikes and read
+    // full-width characters back as the half-width ones. Names that already had full-width ？ or ： (common in
+    // Japanese titles) then no longer matched, so 0.7.1 copied them again under new names. 0.7.2 removed it:
+    // names are never changed. A name the destination refuses is skipped and listed as an error instead.
+
+    /**
+     * 0.7.4. Names a FAT or exFAT memory card cannot keep as they are: ending in a period or a space. These file
+     * systems follow Windows rules: the card's driver silently drops a trailing period ("Y." is stored as "Y") and
+     * drops or refuses a trailing space. Stored under the shorter name, the copy no longer matched its source, so
+     * every "make identical" copied it again and then deleted it as a destination-only file . Such names are left out on both sides and never
+     * renamed; the copy a card already holds under the shortened name is then a destination-only file. Returns
+     * rclone's filter flags, or none when the destination is not a card of that kind ("other" is e.g. ext4).
+     */
+    static List<String> cardNameFilters(String dst) {
+        ArrayList<String> a = new ArrayList<>();
+        String f = removableFormat(dst);
+        if (f == null || f.equals("other")) return a;
+        for (String p : new String[]{"*.", "* ", "*./**", "* /**"}) { a.add("--exclude"); a.add(p); }
+        return a;
+    }
+
+    /** A name a FAT or exFAT card cannot keep as it is (see {@link #cardNameFilters}). */
+    static boolean cardRefuses(String name) { return name.endsWith(".") || name.endsWith(" "); }
+
+    static final String CARD_REFUSES = "記憶卡存不了結尾是句點或空格的名稱（會被系統去掉結尾，變成另一個名稱），所以沒有複製，也沒有改名。";
+
     /** Comparison flags plus the time tolerance, for the real sync and its preview alike. */
     static List<String> compareArgs(Context c, String src, String dst) {
         List<String> a = compareFlags(compare(c));

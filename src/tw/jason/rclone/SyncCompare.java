@@ -74,6 +74,8 @@ public final class SyncCompare {
             a.addAll(Settings.compareArgs(c, src, dst));
         }
         else Collections.addAll(a, "copy", "--dry-run", "--create-empty-src-dirs", "--ignore-existing");
+        // 0.7.4: names a memory card cannot keep are left out, as in the real run.
+        a.addAll(Settings.cardNameFilters(dst));
         // One attempt only: rclone's default of three would compare everything again after a single unreadable file.
         Collections.addAll(a, "--use-json-log", "-v", "--stats", "1s", "--stats-log-level", "NOTICE",
                 "--checkers", String.valueOf(Settings.checkers(c)), "--retries", "1", "--low-level-retries", "3",

@@ -1932,6 +1932,14 @@ public class MainActivity extends Activity implements PaneView.Host {
         transferList.page.show();
     }
 
+    /** Share sheet for a file on the phone's own storage (0.7.3, used for transfer reports). */
+    private void shareFile(java.io.File f) {
+        Uri u = new Uri.Builder().scheme("content").authority("tw.jason.rclone.files").path(f.getAbsolutePath()).build();
+        Intent in = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM, u).putExtra(Intent.EXTRA_SUBJECT, f.getName())
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try { startActivity(Intent.createChooser(in, "分享報告")); } catch (Exception e) { message(null, "手機裡沒有能分享檔案的 App。"); }
+    }
+
     void showTransferDetail(String id) {
         if (transferDetail != null) transferDetail.page.dismiss();
         final TransferPages.DetailPage d = new TransferPages.DetailPage(this, overlay, pages, id);
@@ -1991,6 +1999,17 @@ public class MainActivity extends Activity implements PaneView.Host {
             TransferPages.chooseCompare(MainActivity.this, overlay, () -> snack("比對方式改成「" + Settings.compareName(Settings.compare(MainActivity.this)) + "」，下一次同步開始生效"));
         }
         @Override public void openDetail(String id) { showTransferDetail(id); }
+        @Override public void exportReport(String id) {
+            snack("正在產生報告…");
+            new Thread(() -> {
+                try {
+                    java.io.File f = ReportExport.export(MainActivity.this, id);
+                    handler.post(() -> overlay.new Dialog("報告已存好", "存在「" + displayPath(f.getAbsolutePath()) + "」。\n裡面有這次傳輸的設定、各項數字、沒有刪除的原因、每一種錯誤的原始訊息和檔案清單；不含密碼和連線設定。")
+                            .action("知道了", Ui.ButtonStyle.TEXT, null)
+                            .action("分享", Ui.ButtonStyle.FILLED, () -> shareFile(f)).show());
+                } catch (Exception e) { handler.post(() -> message("無法產生報告", String.valueOf(e.getMessage()))); }
+            }, "export-report").start();
+        }
     };
 
     // ============================================================================================

@@ -44,6 +44,8 @@ final class TransferPages {
         void deleteRecord(JSONObject record);
         void chooseCompare();
         void openDetail(String id);
+        /** 0.7.3: writes the record as a report file and offers to share it. */
+        void exportReport(String id);
     }
 
     // ---- Shared wording ---------------------------------------------------------------------------
@@ -57,13 +59,16 @@ final class TransferPages {
         String s = r.optString("state").replaceAll("（\\d+）", "");
         if (s.equals("等待中")) return "排隊中";
         if (s.equals("進行中")) return r.optBoolean("cancelling") ? "正在取消" : r.optString("operation") + "中";
+        // 0.7.1: a run with some failed files still kept everything it copied; "失敗" alone read as "nothing done".
+        JSONObject sum = r.optJSONObject("result");
+        if (s.startsWith("失敗") && sum != null && copied(r.optString("kind"), sum) + n(sum, "deleted") > 0) return "部分完成";
         return s;
     }
 
     static int stateIcon(String state) {
         if (state.contains("沒有新增")) return R.drawable.ic_info;
         if (state.startsWith("完成")) return R.drawable.ic_check_circle;
-        if (state.startsWith("失敗") || state.startsWith("無法")) return R.drawable.ic_error;
+        if (state.startsWith("失敗") || state.startsWith("無法") || state.equals("部分完成")) return R.drawable.ic_error;
         if (state.equals("排隊中")) return R.drawable.ic_schedule;
         if (state.endsWith("中")) return R.drawable.ic_sync;
         return R.drawable.ic_cancel;
@@ -71,7 +76,7 @@ final class TransferPages {
 
     static int stateTint(String state) {
         if (state.startsWith("完成") && !state.contains("沒有新增")) return Ui.success;
-        if (state.startsWith("失敗") || state.startsWith("無法")) return Ui.error;
+        if (state.startsWith("失敗") || state.startsWith("無法") || state.equals("部分完成")) return Ui.error;
         if (state.endsWith("中") && !state.equals("排隊中")) return Ui.primary;
         return Ui.muted;
     }
@@ -132,9 +137,10 @@ final class TransferPages {
     /** Deletion state of a "make identical" sync in a few words. */
     static String deletionShort(JSONObject r, JSONObject sum) {
         long deleted = n(sum, "deleted"), planned = n(sum, "onlyDst");
-        if (sum.optBoolean("deletesSkipped")) return "因為出錯沒有刪除";
+        if (sum.optBoolean("deletesSkipped") && planned > 0) return "因為出錯沒有刪除 " + MainActivity.count(planned);
         if (isRunning(r) && deleted == 0 && planned > 0) return "傳完後要刪除 " + MainActivity.count(planned);
-        return "已刪除 " + MainActivity.count(deleted);
+        long dirs = n(sum, "removedDirs");
+        return "已刪除 " + MainActivity.count(deleted) + (dirs > 0 ? "、資料夾 " + MainActivity.count(dirs) : "");
     }
 
     /** "11/9 14:03", with the year when it is not this year. */
@@ -530,12 +536,15 @@ final class TransferPages {
                 g.add(new Group("replaced", "更新", differs + "，已用來源的版本覆蓋", n(sum, "replaced"), TransferReport.REPLACED));
                 g.add(new Group("same", "不用傳", "兩邊相同", n(sum, "same"), TransferReport.SAME));
                 boolean pending = run && n(sum, "deleted") == 0 && n(sum, "onlyDst") > 0;
-                if (sum != null && sum.optBoolean("deletesSkipped"))
+                if (sum != null && sum.optBoolean("deletesSkipped") && n(sum, "onlyDst") > 0)
                     g.add(new Group("onlyDst", "沒有刪除", "只在目的地；因為出錯，這次沒有刪", n(sum, "onlyDst"), TransferReport.ONLY_DST));
                 else if (pending)
                     g.add(new Group("onlyDst", "要刪除", "只在目的地", n(sum, "onlyDst"), TransferReport.ONLY_DST));
                 else
                     g.add(new Group("deleted", "已刪除", "只在目的地，已刪除", n(sum, "deleted"), TransferReport.DELETED));
+                // 0.7.4: folders only in the destination, removed (rclone's own or the app's clean-up).
+                if (n(sum, "removedDirs") > 0)
+                    g.add(new Group("dirs", "刪除的資料夾", "只在目的地的資料夾，已刪除", n(sum, "removedDirs"), TransferReport.DIRS));
                 break;
             }
             case TransferService.FILL:
@@ -554,6 +563,8 @@ final class TransferPages {
                 if (dir) g.add(new Group("onlyDst", "只在目的地", "保留不動", n(sum, "onlyDst"), TransferReport.ONLY_DST));
                 break;
         }
+        if (n(sum, "skipped") > 0)
+            g.add(new Group("skipped", "略過", "目的地存不了這個名稱，沒有複製", n(sum, "skipped"), TransferReport.SKIPPED));
         g.add(new Group("errors", "出錯", "沒有傳成的檔案", n(sum, "fileErrors"), TransferReport.ERRORS));
         return g;
     }
@@ -667,6 +678,9 @@ final class TransferPages {
                 }
                 View spacer = new View(c);
                 actions.addView(spacer, Ui.weight(1));
+                TextView export = Ui.button(c, "匯出報告", Ui.ButtonStyle.TEXT, v -> host.exportReport(r.optString("id")));
+                export.setContentDescription("把這筆傳輸的完整結果和出錯原因存成文字檔，可以分享出去分析");
+                actions.addView(export);
                 TextView del = Ui.button(c, "刪除紀錄", Ui.ButtonStyle.TEXT, v -> host.deleteRecord(r));
                 del.setContentDescription("刪除這筆紀錄，不會動到任何檔案");
                 actions.addView(del);
@@ -769,9 +783,31 @@ final class TransferPages {
                         + "如果這個位置一直保留不了修改時間，可以把比對方式改成「只比對大小」。";
                 warnings.addView(notice(R.drawable.ic_info, Ui.error, "目的地沒有保留修改時間", body, "變更比對方式", host::chooseCompare));
             }
-            if (sum != null && sum.optBoolean("deletesSkipped"))
-                warnings.addView(notice(R.drawable.ic_error, Ui.error, "因為出錯，這次沒有刪除任何檔案",
-                        "同步出錯時，為了安全，不會刪除目的地多出的檔案。把出錯的檔案處理好、再同步一次，才會刪除。", null, null));
+            long failedFiles = n(sum, "fileErrors");
+            if (failedFiles > 0 && !isRunning(r))
+                warnings.addView(notice(R.drawable.ic_error, Ui.error, MainActivity.count(failedFiles) + " 個檔案沒傳成",
+                        "其他檔案都照常處理，傳好的會留著。沒傳成的檔案和原因列在下方「出錯」。目的地不接受的名稱，App 不會改名，只會略過。", null, null));
+            // Only when there was something to delete; 0.7.0 also said it when nothing was waiting to be deleted.
+            if (sum != null && sum.optBoolean("deletesSkipped") && n(sum, "onlyDst") > 0)
+            {
+                JSONObject why = sum.optJSONObject("unsafeReason");
+                String reason = why == null ? "" : "\n擋住刪除的錯誤：" + why.optString("plain") + (why.optString("object").isEmpty() ? "" : "（" + why.optString("object") + "）")
+                        + "\n原文：" + why.optString("msg");
+                warnings.addView(notice(R.drawable.ic_info, Ui.error, "有錯誤可能讓清單不完整，目的地多出的 " + MainActivity.count(n(sum, "onlyDst")) + " 個檔案這次沒有刪除",
+                        "清單不完整時，沒讀到的檔案看起來就像不存在，照刪會刪錯。只是個別檔案寫不進去時，不會擋住刪除。" + reason
+                        + "\n如果這個錯誤其實不影響清單，請按上方「匯出報告」把報告傳給開發者。", null, null));
+            }
+            if (sum != null && sum.optBoolean("deletedAnyway") && n(sum, "deleted") + n(sum, "removedDirs") > 0) {
+                long files = n(sum, "deleted"), dirs = n(sum, "removedDirs"), keptDirs = n(sum, "keptDirs");
+                String what = (files > 0 ? MainActivity.count(files) + " 個檔案" : "") + (files > 0 && dirs > 0 ? "、" : "") + (dirs > 0 ? MainActivity.count(dirs) + " 個資料夾" : "");
+                warnings.addView(notice(R.drawable.ic_info, Ui.primary, "目的地多出的 " + what + "照樣刪除了",
+                        "這次的出錯都是個別檔案寫不進去，兩邊的資料夾都有讀完整，所以 rclone 跳過刪除後，App 依完整的比對結果另外刪除了多出的檔案，再刪掉來源沒有的資料夾（包括原本就是空的）。沒傳成的檔案沒有改名。"
+                        + (keptDirs > 0 ? "\n有 " + MainActivity.count(keptDirs) + " 個來源沒有的資料夾沒刪：裡面還有東西，或來源也有同名的空資料夾。" : ""), null, null));
+            }
+            if (sum != null && n(sum, "skipped") > 0)
+                warnings.addView(notice(R.drawable.ic_info, Ui.error, MainActivity.count(n(sum, "skipped")) + " 個名稱目的地存不了，沒有複製",
+                        Settings.CARD_REFUSES + "列在下方「略過」。"
+                        + (sum.optBoolean("cardNames") ? "這裡只列出最上層的；更深的資料夾裡如果也有這種名稱，同樣略過，但不一一列出。記憶卡上已有的、名稱被去掉結尾的那份，會當成多出的檔案刪除。" : ""), null, null));
             JSONArray general = sum == null ? null : sum.optJSONArray("general");
             if (general != null && general.length() > 0) {
                 StringBuilder b = new StringBuilder();
@@ -974,7 +1010,7 @@ final class TransferPages {
                 for (int i = 0; i < a.length(); i++) {
                     JSONArray e = a.optJSONArray(i);
                     if (e == null) continue;
-                    files.addView(fileRow(e, k.equals(TransferReport.ERRORS)));
+                    files.addView(fileRow(e, k.equals(TransferReport.ERRORS) || k.equals(TransferReport.SKIPPED)));
                     shown++;
                 }
             }
