@@ -45,6 +45,7 @@ final class PaneView extends LinearLayout {
         void showLocations(PaneView p, View anchor);
         void showMenu(PaneView p, View anchor);
         void retry(PaneView p);
+        void cancelLoad(PaneView p);
         void requestAccess();
         boolean needsAccess(String path);
         String rootLabel(String root);
@@ -82,6 +83,10 @@ final class PaneView extends LinearLayout {
     private final ProgressLine progress;
     private final ListView list;
     private final LinearLayout stateView;
+    private final FrameLayout loadingView;
+    private final TextView loadingTitle, loadingHint, loadingStop;
+    private final TransferUi.Ring loadingRing;
+    private final Runnable showLoading = this::revealLoading, showLoadingHelp = this::revealLoadingHelp;
     private final Adapter adapter = new Adapter();
     private final ArrayList<FileOps.Entry> shown = new ArrayList<>();
     private int headerMode = -1;
@@ -223,6 +228,41 @@ final class PaneView extends LinearLayout {
         stateView.setPadding(Ui.dp(32), Ui.dp(40), Ui.dp(32), Ui.dp(24));
         stateView.setVisibility(GONE);
         body.addView(stateView, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
+
+        // Loading cover: appears only when a folder takes a moment, so quick folders never flash it.
+        // It also blocks taps on the old list, which is dimmed behind it.
+        loadingView = new FrameLayout(c);
+        loadingView.setClickable(true);
+        loadingView.setVisibility(GONE);
+        LinearLayout card = Ui.column(c);
+        card.setGravity(Gravity.CENTER_HORIZONTAL);
+        card.setBackground(Ui.round(Ui.surfaceContainer, 24));
+        card.setElevation(Ui.dp(2));
+        card.setPadding(Ui.dp(24), Ui.dp(22), Ui.dp(24), Ui.dp(18));
+        loadingRing = new TransferUi.Ring(c, Ui.primary);
+        card.addView(loadingRing, new LayoutParams(Ui.dp(36), Ui.dp(36)));
+        loadingTitle = Ui.oneLine(Ui.title(c, "", 15.5f, Ui.ink), TextUtils.TruncateAt.MIDDLE);
+        loadingTitle.setGravity(Gravity.CENTER);
+        LayoutParams tl = new LayoutParams(-2, -2);
+        tl.topMargin = Ui.dp(14);
+        card.addView(loadingTitle, tl);
+        loadingHint = Ui.text(c, "項目很多或網路較慢時會比較久。停止讀取會留在原本的資料夾。", 13.5f, Ui.muted);
+        loadingHint.setGravity(Gravity.CENTER);
+        loadingHint.setPadding(0, Ui.dp(6), 0, 0);
+        loadingHint.setVisibility(GONE);
+        card.addView(loadingHint, new LayoutParams(-2, -2));
+        loadingStop = Ui.button(c, "停止讀取", Ui.ButtonStyle.TEXT, v -> host.cancelLoad(this));
+        loadingStop.setContentDescription("停止讀取，留在原本的資料夾");
+        loadingStop.setVisibility(GONE);
+        LayoutParams sl = new LayoutParams(-2, -2);
+        sl.topMargin = Ui.dp(8);
+        card.addView(loadingStop, sl);
+        card.setAccessibilityLiveRegion(ACCESSIBILITY_LIVE_REGION_POLITE);
+        FrameLayout.LayoutParams cl = new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_HORIZONTAL | Gravity.TOP);
+        cl.topMargin = Ui.dp(72);
+        cl.leftMargin = cl.rightMargin = Ui.dp(24);
+        loadingView.addView(card, cl);
+        body.addView(loadingView, new FrameLayout.LayoutParams(-1, -1));
         addView(body, new LayoutParams(-1, 0, 1));
 
         applyHeaderMode(false);
@@ -323,9 +363,59 @@ final class PaneView extends LinearLayout {
         refresh();
     }
 
-    void setLoading(boolean on) {
+    void setLoading(boolean on) { setLoading(on, null); }
+
+    /** target names the folder being read. */
+    void setLoading(boolean on, String target) {
+        loadingState(on, target == null ? "正在讀取…" : "正在讀取「" + label(target) + "」…", true);
+    }
+
+    /** Work that cannot be stopped from here, such as deleting; the cover shows title without a stop button. */
+    void setWorking(String title) { loadingState(true, title, false); }
+
+    private boolean stoppable = true;
+
+    private void loadingState(boolean on, String title, boolean canStop) {
         loading = on;
+        stoppable = canStop;
         progress.setRunning(on);
+        removeCallbacks(showLoading);
+        removeCallbacks(showLoadingHelp);
+        if (on) {
+            loadingTitle.setText(title);
+            if (loadingView.getVisibility() == VISIBLE) revealLoading();
+            else {
+                loadingHint.setVisibility(GONE);
+                loadingStop.setVisibility(GONE);
+                postDelayed(showLoading, 300);
+            }
+            postDelayed(showLoadingHelp, 2500);
+        } else if (loadingView.getVisibility() == VISIBLE) {
+            loadingRing.stop();
+            loadingView.animate().cancel();
+            loadingView.animate().alpha(0f).setDuration(120).withEndAction(() -> { if (!loading) loadingView.setVisibility(GONE); }).start();
+            list.animate().alpha(1f).setDuration(150).start();
+            stateView.animate().alpha(1f).setDuration(150).start();
+        }
+    }
+
+    private void revealLoading() {
+        if (!loading) return;
+        loadingRing.setFraction(-1);
+        loadingView.animate().cancel();
+        if (loadingView.getVisibility() != VISIBLE) { loadingView.setAlpha(0f); loadingView.setVisibility(VISIBLE); }
+        loadingView.animate().alpha(1f).setDuration(150).withEndAction(null).start();
+        list.animate().cancel();
+        list.animate().alpha(.35f).setDuration(150).start();
+        // An empty-folder or error message from before would read as the answer; hide it until the result.
+        stateView.animate().cancel();
+        stateView.animate().alpha(0f).setDuration(120).start();
+    }
+
+    private void revealLoadingHelp() {
+        if (!loading || !stoppable) return;
+        loadingHint.setVisibility(VISIBLE);
+        loadingStop.setVisibility(VISIBLE);
     }
 
     /** Re-filters, re-sorts and redraws everything that depends on state. Cheap; call freely. */

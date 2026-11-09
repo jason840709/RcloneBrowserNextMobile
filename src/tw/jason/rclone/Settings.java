@@ -10,13 +10,13 @@ import java.util.List;
  * User settings, stored in one shared file so the screens and the transfer service read the same
  * values. Every default reproduces the behaviour of 0.3.0.
  */
-final class Settings {
+public final class Settings {
     private Settings() {}
 
     static final String FILE = "settings";
     static final String ACCENT = "accent", NIGHT = "night", ICON_FOLLOWS = "iconFollows", DENSE = "dense",
             THUMBNAILS = "thumbnails", HIDDEN = "hidden", START_AT = "startAt", BACK_EXIT = "backExit",
-            TRANSFERS = "transfers", BWLIMIT = "bwlimitMB", SLOW_NETWORK = "slowNetwork", ASK_MOBILE = "askMobileData",
+            TRANSFERS = "transfers", CHECKERS = "checkers", COMPARE = "compare", BWLIMIT = "bwlimitMB", SLOW_NETWORK = "slowNetwork", ASK_MOBILE = "askMobileData",
             BOOKMARKS = "bookmarks", CONFIG_STAMP = "configStamp";
 
     static final String PURPLE = "purple", BLUE = "blue", GREEN = "green";
@@ -45,8 +45,83 @@ final class Settings {
         return n >= 1 && n <= 16 ? n : DEFAULT_TRANSFERS;
     }
 
-    /** Checkers keep pace with transfers; 0.3.0 used 8 with 4 transfers. */
-    static int checkers(Context c) { return Math.max(8, transfers(c) * 2); }
+    /**
+     * Files compared in parallel (rclone's checkers). Until 0.6.0 this followed the transfer count
+     * (at least 8, twice the transfers); since 0.7.0 it can be set. Unset keeps the old rule.
+     */
+    static int checkers(Context c) {
+        int n = prefs(c).getInt(CHECKERS, 0);
+        return n >= 1 && n <= 64 ? n : Math.max(8, transfers(c) * 2);
+    }
+
+    // ---- Comparison (0.7.0) -------------------------------------------------------------------
+    // How "make identical" decides whether a file present on both sides is copied again. Copy, move
+    // and "only fill in missing files" skip files that already exist (--ignore-existing), so they never
+    // overwrite and this setting does not apply to them. The choices follow the desktop app; its
+    // "no content reads" mode, "time only", "hash only" and "copy everything again" are left out (see
+    // the 0.7.0 notes).
+
+    public static final int COMPARE_DEFAULT = 0, COMPARE_SIZE = 1, COMPARE_CHECKSUM = 2;
+    static final String[] COMPARE_NAMES = {"大小與修改時間（預設）", "只比對大小", "大小與內容"};
+
+    static int compare(Context c) {
+        int n = prefs(c).getInt(COMPARE, COMPARE_DEFAULT);
+        return n >= 0 && n < COMPARE_NAMES.length ? n : COMPARE_DEFAULT;
+    }
+
+    static String compareName(int mode) { return COMPARE_NAMES[mode >= 0 && mode < COMPARE_NAMES.length ? mode : 0]; }
+
+    /** rclone flags for a comparison mode. The default adds none: rclone compares size and modification time. */
+    public static List<String> compareFlags(int mode) {
+        ArrayList<String> a = new ArrayList<>();
+        if (mode == COMPARE_SIZE) a.add("--size-only");
+        else if (mode == COMPARE_CHECKSUM) a.add("--checksum");
+        return a;
+    }
+
+    /**
+     * Time tolerance for memory cards and USB drives. FAT keeps times to 2 seconds and exFAT to 10 ms,
+     * but rclone measures the precision of the phone's own storage, so without this every file on such
+     * a card would look changed. Same idea as the desktop app, which reads the disk format. Returns
+     * null for phone storage and remotes.
+     */
+    static String modifyWindow(String src, String dst) {
+        String a = removableFormat(src), b = removableFormat(dst);
+        // An unknown format on a card is most likely FAT, so it gets FAT's 2 seconds.
+        if ("vfat".equals(a) || "vfat".equals(b) || "".equals(a) || "".equals(b)) return "2s";
+        if ("exfat".equals(a) || "exfat".equals(b)) return "10ms";
+        return null;
+    }
+
+    /** "vfat", "exfat", "other" for a path on a removable volume; "" when its format is unknown; null for anything else. */
+    static String removableFormat(String path) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("^/storage/([0-9A-Fa-f]{4}-[0-9A-Fa-f]{4})(/|$)").matcher(path == null ? "" : path);
+        if (!m.find()) return null;
+        try {
+            return formatFromMounts(new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("/proc/self/mounts")), java.nio.charset.StandardCharsets.UTF_8), m.group(1));
+        } catch (Exception e) { return ""; }
+    }
+
+    /** Package-private for the tests: the format of the volume with this id in a mounts table. */
+    public static String formatFromMounts(String mounts, String id) {
+        for (String line : mounts.split("\n")) {
+            String[] f = line.split(" ");
+            if (f.length < 3 || !f[1].endsWith("/" + id)) continue;
+            String type = f[2].toLowerCase(java.util.Locale.ROOT);
+            if (type.equals("vfat") || type.equals("msdos") || type.equals("fat")) return "vfat";
+            if (type.equals("exfat") || type.equals("sdfat") || type.equals("texfat")) return "exfat";
+            if (!type.startsWith("fuse") && !type.equals("sdcardfs")) return "other";
+        }
+        return "";
+    }
+
+    /** Comparison flags plus the time tolerance, for the real sync and its preview alike. */
+    static List<String> compareArgs(Context c, String src, String dst) {
+        List<String> a = compareFlags(compare(c));
+        String window = modifyWindow(src, dst);
+        if (window != null) { a.add("--modify-window"); a.add(window); }
+        return a;
+    }
 
     /** Bandwidth limit in MB per second; 0 means unlimited, as in 0.3.0. */
     static int bandwidthMB(Context c) {

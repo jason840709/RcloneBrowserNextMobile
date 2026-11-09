@@ -45,7 +45,14 @@ public final class Rclone {
     public static Process start(Context c, List<String> args) throws IOException {
         return builder(c, args, true).start();
     }
-    public static Result run(Context c, String... args) {
+    /** Short commands: 90 seconds at most, as up to 0.5.0. */
+    public static Result run(Context c, String... args) { return run(c, 90, args); }
+
+    /**
+     * Runs a command and waits up to {@code seconds}. rclone's own connect and idle timeouts still end it
+     * sooner when the network stops answering; this limit only catches commands that keep going too long.
+     */
+    public static Result run(Context c, long seconds, String... args) {
         Process process = null;
         ExecutorService readers = Executors.newFixedThreadPool(2);
         try {
@@ -53,9 +60,10 @@ public final class Rclone {
             final Process owned = process;
             Future<String> stdout = readers.submit(() -> read(owned.getInputStream()));
             Future<String> stderr = readers.submit(() -> read(owned.getErrorStream()));
-            if (!process.waitFor(90, TimeUnit.SECONDS)) {
+            if (!process.waitFor(seconds, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
-                return new Result(124, "", "連線逾時，請檢查網路與連線設定");
+                // Not a network timeout: the command was still working. Keep the two apart for the user.
+                return new Result(124, "", "TOO_LONG");
             }
             return new Result(process.exitValue(), stdout.get(10, TimeUnit.SECONDS), stderr.get(10, TimeUnit.SECONDS));
         } catch (InterruptedException e) {

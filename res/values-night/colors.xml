@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="surface">#141218</color>
-    <color name="surface_low">#1A181E</color>
-    <color name="surface_container">#211F26</color>
-    <color name="surface_high">#2B2930</color>
-    <color name="surface_highest">#36343B</color>
-    <color name="on_surface">#E6E0E9</color>
-    <color name="on_surface_variant">#CAC4D0</color>
-    <color name="outline">#938F99</color>
-    <color name="outline_variant">#36323B</color>
+    <color name="surface">#121212</color>
+    <color name="surface_low">#1A1A1A</color>
+    <color name="surface_container">#212121</color>
+    <color name="surface_high">#2B2B2B</color>
+    <color name="surface_highest">#363636</color>
+    <color name="on_surface">#E6E6E6</color>
+    <color name="on_surface_variant">#C2C2C2</color>
+    <color name="outline">#8E8E8E</color>
+    <color name="outline_variant">#333333</color>
     <color name="primary">#C4A6DE</color>
     <color name="on_primary">#2B1D38</color>
     <color name="primary_container">#45325A</color>
@@ -20,10 +20,10 @@
     <color name="on_error_container">#F9DEDC</color>
     <color name="success">#8FD3AE</color>
     <color name="success_container">#1F3A2B</color>
-    <color name="inverse_surface">#E6E0E9</color>
-    <color name="inverse_on_surface">#322F35</color>
+    <color name="inverse_surface">#E3E3E3</color>
+    <color name="inverse_on_surface">#303030</color>
     <color name="inverse_primary">#76558F</color>
-    <color name="ripple">#24E6E0E9</color>
+    <color name="ripple">#24E6E6E6</color>
     <color name="scrim">#8A000000</color>
     <color name="launcher_bg">#F6F1FA</color>
     <color name="launcher_bg_blue">#EEF3FA</color>
@@ -40,5 +40,5 @@
     <color name="tile_archive_bg">#3A3127</color> <color name="tile_archive_fg">#DCC3A4</color>
     <color name="tile_apk_bg">#233A1F</color>     <color name="tile_apk_fg">#A8D99B</color>
     <color name="tile_code_bg">#2A3138</color>    <color name="tile_code_fg">#B6C4D3</color>
-    <color name="tile_file_bg">#2E2B32</color>    <color name="tile_file_fg">#C9C2CF</color>
+    <color name="tile_file_bg">#2C2C2C</color>    <color name="tile_file_fg">#C6C6C6</color>
 </resources>

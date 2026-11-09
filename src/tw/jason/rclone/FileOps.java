@@ -48,7 +48,9 @@ final class FileOps {
             for (File f : fs) entries.add(new Entry(f.getName(), f.getAbsolutePath(), f.isDirectory(), f.length(), f.lastModified()));
             return entries;
         }
-        Rclone.Result r = Rclone.run(c, "lsjson", "--contimeout", Settings.listConnectTimeout(c), "--timeout", Settings.listIdleTimeout(c), "--retries", "1", "--low-level-retries", "1", "--", destination);
+        // Up to 5 minutes: a very large folder on a slow NAS can take longer than the 90 s default, and the
+        // screen offers "停止讀取" meanwhile.
+        Rclone.Result r = Rclone.run(c, 300, "lsjson", "--contimeout", Settings.listConnectTimeout(c), "--timeout", Settings.listIdleTimeout(c), "--retries", "1", "--low-level-retries", "1", "--", destination);
         if (r.code != 0) throw new IOException(friendlyError(r.err));
         try {
             JSONArray items = new JSONArray(r.out);
@@ -70,6 +72,7 @@ final class FileOps {
     /** Maps engine error text to a short reason. Raw engine text can contain hosts or tokens, so it is never shown. */
     static String friendlyError(String e) {
         String s = e == null ? "" : e.toLowerCase();
+        if (s.contains("too_long")) return "超過 App 的等待時間，已經停止，不一定是連線問題。項目很多時，請改用裡面較小的資料夾。";
         if (s.contains("permission denied") || s.contains("access denied") || s.contains("403")) return "沒有存取權限，請確認帳號與資料夾權限。";
         if (s.contains("not found") || s.contains("not exist")) return "找不到這個位置。";
         if (s.contains("timeout") || s.contains("逾時")) return "連線逾時，請確認網路與主機是否開著。";
@@ -81,7 +84,8 @@ final class FileOps {
 
     static Rclone.Result stat(Context c, String path) { return Rclone.run(c, "lsjson", "--stat", "--", path); }
 
-    static Rclone.Result delete(Context c, Entry e) { return Rclone.run(c, e.dir ? "purge" : "deletefile", "--", e.path); }
+    /** Up to an hour: deleting a folder with many files on a NAS takes long, and stopping halfway leaves it half deleted. */
+    static Rclone.Result delete(Context c, Entry e) { return Rclone.run(c, 3600, e.dir ? "purge" : "deletefile", "--", e.path); }
 
     static Rclone.Result version(Context c) { return Rclone.run(c, "version"); }
 
@@ -120,48 +124,25 @@ final class FileOps {
         return Rclone.run(c, args.toArray(new String[0]));
     }
 
-    static Rclone.Result syncPreview(Context c, String src, String dst) {
-        return Rclone.run(c, "sync", "--dry-run", "--use-json-log", "--create-empty-src-dirs", "--delete-after", "-v", "--", src, dst);
-    }
-
-    /** Dry run of a folder copy that skips existing names, mirroring the flags TransferService uses for copy. */
-    static Rclone.Result fillPreview(Context c, String src, String dst) {
-        return Rclone.run(c, "copy", "--dry-run", "--use-json-log", "--create-empty-src-dirs", "--ignore-existing", "-v", "--", src, dst);
-    }
-
     static final class SyncChange {
         static final int UPDATE = 0, DELETE = 1, FOLDER = 2, OTHER = 3;
         final int kind; final String object, action;
         SyncChange(int k, String o, String a) { kind = k; object = o; action = a; }
     }
 
-    static final class SyncPlan {
-        final ArrayList<SyncChange> changes = new ArrayList<>();
-        int updates, deletes, folders;
-        /** Entries whose content stays the same; rclone only adjusts their modification time. */
-        int timeOnly;
-    }
-
-    /** Same classification as the 0.1.0 preview text: copy → 新增或更新, delete/rmdir → 刪除, mkdir → 建立資料夾. */
-    static SyncPlan parseSyncPreview(String raw) throws JSONException {
-        SyncPlan plan = new SyncPlan();
-        for (String line : raw.split("\\n")) {
-            if (line.trim().isEmpty()) continue;
-            JSONObject entry = new JSONObject(line);
-            String action = entry.optString("skipped"), object = entry.optString("object");
-            if (action.isEmpty()) continue;
-            int kind;
-            String a = action.toLowerCase();
-            // rclone 1.68 reports "make directory", "update modification time" and
-            // "set directory modification time"; older wording such as "mkdir" is kept too.
-            if (a.contains("modification time")) { plan.timeOnly++; continue; }
-            if (a.equals("copy")) { kind = SyncChange.UPDATE; plan.updates++; }
-            else if (a.contains("delete") || a.equals("rmdir") || a.contains("remove directory")) { kind = SyncChange.DELETE; plan.deletes++; }
-            else if (a.equals("mkdir") || a.contains("make directory")) { kind = SyncChange.FOLDER; plan.folders++; }
-            else kind = SyncChange.OTHER;
-            plan.changes.add(new SyncChange(kind, object, action));
-        }
-        return plan;
+    /**
+     * Same classification as the 0.1.0 preview text: copy → 新增或更新, delete/rmdir → 刪除, mkdir → 建立資料夾.
+     * Returns null for entries whose content stays the same (rclone only adjusts their modification time).
+     */
+    static SyncChange classify(String action, String object) {
+        String a = action.toLowerCase();
+        // rclone reports "make directory", "update modification time" and "set directory modification time";
+        // older wording such as "mkdir" is kept too.
+        if (a.contains("modification time")) return null;
+        if (a.equals("copy")) return new SyncChange(SyncChange.UPDATE, object, action);
+        if (a.contains("delete") || a.equals("rmdir") || a.contains("remove directory")) return new SyncChange(SyncChange.DELETE, object, action);
+        if (a.equals("mkdir") || a.contains("make directory")) return new SyncChange(SyncChange.FOLDER, object, action);
+        return new SyncChange(SyncChange.OTHER, object, action);
     }
 
     /** Validates first, then queues, so a bad target never leaves half the items queued. */

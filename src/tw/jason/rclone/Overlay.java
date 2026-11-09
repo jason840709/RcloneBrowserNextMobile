@@ -478,6 +478,72 @@ final class Overlay {
     // ------------------------------------------------------------------------------------------
     // Building blocks for sheet and menu content
 
+    // ------------------------------------------------------------------------------------------
+
+    /**
+     * Full-screen page (0.7.0): top bar with Back, a title and optional actions, and a body that fills the
+     * rest. It slides in from the right; Back or the arrow closes it. Sheets and dialogs opened later stack
+     * above it.
+     */
+    final class Page extends Layer {
+        final LinearLayout panel, bar, actions;
+        final TextView title;
+        final FrameLayout body;
+
+        Page(String titleText) {
+            super(false);
+            panel = Ui.column(context);
+            panel.setBackgroundColor(Ui.surface);
+            panel.setClickable(true);
+            bar = Ui.row(context);
+            bar.addView(Ui.iconButton(context, R.drawable.ic_back, "返回", Ui.ink, v -> dismiss()), new LinearLayout.LayoutParams(Ui.dp(48), Ui.dp(48)));
+            title = Ui.oneLine(Ui.title(context, titleText, 20, Ui.ink), TextUtils.TruncateAt.END);
+            title.setPadding(Ui.dp(8), 0, Ui.dp(8), 0);
+            if (Build.VERSION.SDK_INT >= 28) title.setAccessibilityHeading(true);
+            bar.addView(title, Ui.weight(1));
+            actions = Ui.row(context);
+            bar.addView(actions);
+            panel.addView(bar, new LinearLayout.LayoutParams(-1, -2));
+            body = new FrameLayout(context);
+            panel.addView(body, new LinearLayout.LayoutParams(-1, 0, 1));
+            frame.addView(panel, new FrameLayout.LayoutParams(-1, -1));
+            if (Build.VERSION.SDK_INT >= 28) panel.setAccessibilityPaneTitle(titleText);
+        }
+
+        void setTitle(String s) {
+            title.setText(s);
+            if (Build.VERSION.SDK_INT >= 28) panel.setAccessibilityPaneTitle(s);
+        }
+
+        void setContent(View v) {
+            body.removeAllViews();
+            body.addView(v, new FrameLayout.LayoutParams(-1, -1));
+        }
+
+        @Override void applyInsets() {
+            bar.setPadding(Ui.dp(4), top, Ui.dp(8), 0);
+            bar.setMinimumHeight(top + Ui.dp(56));
+            body.setPadding(0, 0, 0, ime > nav ? 0 : nav);
+        }
+
+        Page show() {
+            attach();
+            if (!Ui.animationsOn()) return this;
+            panel.setAlpha(0f);
+            panel.setTranslationX(Ui.dp(48));
+            panel.animate().alpha(1f).translationX(0).setDuration(260).setInterpolator(Ui.ENTER).setListener(null).start();
+            return this;
+        }
+
+        @Override void animateOut(final Runnable end) {
+            if (!Ui.animationsOn()) { end.run(); return; }
+            panel.animate().alpha(0f).translationX(Ui.dp(48)).setDuration(180).setInterpolator(Ui.EXIT)
+                    .setListener(new AnimatorListenerAdapter() {
+                        @Override public void onAnimationEnd(Animator a) { panel.animate().setListener(null); end.run(); }
+                    }).start();
+        }
+    }
+
     /** Sheet title row. */
     TextView sheetTitle(String s) {
         TextView t = Ui.title(context, s, 20, Ui.ink);

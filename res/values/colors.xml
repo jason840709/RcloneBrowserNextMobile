@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Palette follows the desktop Rclone Browser Next accent (#76558F light / #C4A6DE dark). -->
 <resources>
-    <color name="surface">#FDFBFE</color>
-    <color name="surface_low">#F7F3F9</color>
-    <color name="surface_container">#F2EDF5</color>
-    <color name="surface_high">#ECE6F0</color>
-    <color name="surface_highest">#E6E0E9</color>
-    <color name="on_surface">#1D1B20</color>
-    <color name="on_surface_variant">#5B5661</color>
-    <color name="outline">#7A7480</color>
-    <color name="outline_variant">#E3DDE7</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_low">#F6F6F6</color>
+    <color name="surface_container">#F0F0F0</color>
+    <color name="surface_high">#EAEAEA</color>
+    <color name="surface_highest">#E3E3E3</color>
+    <color name="on_surface">#1C1C1C</color>
+    <color name="on_surface_variant">#5C5C5C</color>
+    <color name="outline">#787878</color>
+    <color name="outline_variant">#E0E0E0</color>
     <color name="primary">#76558F</color>
     <color name="on_primary">#FFFFFF</color>
     <color name="primary_container">#EFE3F8</color>
@@ -21,10 +21,10 @@
     <color name="on_error_container">#410E0B</color>
     <color name="success">#2F7A57</color>
     <color name="success_container">#DDF2E5</color>
-    <color name="inverse_surface">#322F35</color>
-    <color name="inverse_on_surface">#F5EFF7</color>
+    <color name="inverse_surface">#303030</color>
+    <color name="inverse_on_surface">#F2F2F2</color>
     <color name="inverse_primary">#D9BCF0</color>
-    <color name="ripple">#1F1D1B20</color>
+    <color name="ripple">#1F1C1C1C</color>
     <color name="scrim">#52000000</color>
     <color name="launcher_bg">#F6F1FA</color>
     <color name="launcher_bg_blue">#EEF3FA</color>
@@ -41,5 +41,5 @@
     <color name="tile_archive_bg">#EEE7DE</color> <color name="tile_archive_fg">#7A5B3A</color>
     <color name="tile_apk_bg">#E2F1DF</color>     <color name="tile_apk_fg">#3A7A31</color>
     <color name="tile_code_bg">#E4E9EF</color>    <color name="tile_code_fg">#46586B</color>
-    <color name="tile_file_bg">#ECE8EF</color>    <color name="tile_file_fg">#6A6470</color>
+    <color name="tile_file_bg">#ECECEC</color>    <color name="tile_file_fg">#666666</color>
 </resources>

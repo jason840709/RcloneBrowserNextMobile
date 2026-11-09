@@ -161,6 +161,13 @@ public class SettingsActivity extends Activity {
         choiceRow("同時傳輸的檔案數", new String[]{"1 個", "2 個", "4 個（預設）", "8 個"}, indexOf(counts, Settings.transfers(this), 2),
                 i -> Settings.prefs(this).edit().putInt(Settings.TRANSFERS, counts[i]).apply(),
                 "數量越多，大量小檔案傳得越快；有些伺服器會限制同時連線數。");
+        // 0.7.0: checkers can be set, as in the desktop app. "自動" keeps the rule used up to 0.6.0.
+        final int[] checks = {0, 4, 8, 16, 32};
+        choiceRow("同時比對的檔案數", new String[]{"自動（預設）", "4 個", "8 個", "16 個", "32 個"},
+                indexOf(checks, Settings.prefs(this).getInt(Settings.CHECKERS, 0), 0),
+                i -> Settings.prefs(this).edit().putInt(Settings.CHECKERS, checks[i]).apply(),
+                "同步時同時比對兩邊檔案的數量。比對很慢時可以調高，但會同時開更多連線；NAS 很忙或限制連線數時，調低反而比較穩。自動是上一項「同時傳輸的檔案數」的兩倍，最少 8 個。");
+        compareRow();
         final int[] limits = {0, 1, 5, 10, 50};
         choiceRow("傳輸速度上限", new String[]{"不限制（預設）", "每秒 1 MB", "每秒 5 MB", "每秒 10 MB", "每秒 50 MB"}, indexOf(limits, Settings.bandwidthMB(this), 0),
                 i -> Settings.prefs(this).edit().putInt(Settings.BWLIMIT, limits[i]).apply(),
@@ -313,6 +320,17 @@ public class SettingsActivity extends Activity {
             d[0].action("取消", Ui.ButtonStyle.TEXT, null);
             d[0].show();
         });
+    }
+
+    /** 0.7.0: comparison method; the chooser is shared with the sync sheet and the transfer detail page. */
+    private void compareRow() {
+        LinearLayout r = baseRow("比對方式");
+        final TextView value = subtitle(r, Settings.compareName(Settings.compare(this)));
+        r.setContentDescription("比對方式，目前是" + value.getText());
+        r.setOnClickListener(v -> TransferPages.chooseCompare(this, overlay, () -> {
+            value.setText(Settings.compareName(Settings.compare(this)));
+            r.setContentDescription("比對方式，目前是" + value.getText());
+        }));
     }
 
     private View radio(boolean on) {
