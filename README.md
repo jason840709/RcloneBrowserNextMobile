@@ -1,7 +1,7 @@
 <p align="center"><img src="res/mipmap-xxxhdpi/ic_launcher_fg.png" width="112" alt="Rclone Browser Next Mobile 應用程式圖示"></p>
 <h1 align="center">Rclone Browser Next Mobile</h1>
 <p align="center">給 Android 的 rclone 檔案管理器。手機與雲端檔案，切換位置就能搬檔。</p>
-<p align="center"><a href="https://github.com/jason840709/RcloneBrowserNextMobile/releases/tag/v0.7.5">下載 0.7.5</a> · <a href="docs/USER_GUIDE.zh-TW.md">使用手冊</a> · <a href="docs/BUILD.md">建置說明</a> · <a href="https://github.com/jason840709/RcloneBrowserNextMobile/issues">回報問題</a></p>
+<p align="center"><a href="https://github.com/jason840709/RcloneBrowserNextMobile/releases/tag/v0.7.6">下載 0.7.6</a> · <a href="docs/USER_GUIDE.zh-TW.md">使用手冊</a> · <a href="docs/BUILD.md">建置說明</a> · <a href="https://github.com/jason840709/RcloneBrowserNextMobile/issues">回報問題</a></p>
 
 <p align="center"><img src="docs/images/split.png" width="360" alt="上下雙窗格：上方遠端資料夾，下方手機資料夾，中間提供同步設定"></p>
 
@@ -11,13 +11,13 @@
 
 Rclone Browser Next Mobile 是 [Rclone Browser Next](https://github.com/jason840709/RcloneBrowserNext) 系列的 Android 檔案管理器，沿用桌面版的應用程式圖示，提供紫、藍、綠三種強調色。檔案傳輸由 [rclone](https://rclone.org/) 執行，手機介面提供單頁、分頁與上下雙窗格，方便瀏覽資料夾、複製、移動和同步。
 
-**目前版本為 0.7.5，提供 Android ARM64 安裝包。** 最低系統設定為 Android 8。可直接覆蓋更新 0.7.4，保留既有設定與連線。
+**目前版本為 0.7.6，提供 Android ARM64 安裝包。** 最低系統設定為 Android 8。可直接覆蓋更新 0.7.5，保留既有設定與連線。
 
-## 0.7.5 更新
+## 0.7.6 更新
 
-- 同步時，即使部分來源資料夾讀不到，仍會清理其他已確認「來源沒有、目標為空」的資料夾；讀不到的來源資料夾在目標的對應內容會保留，工作仍會顯示錯誤。
-- 修正來源已有空資料夾時，目標在該資料夾底下多出的空子資料夾沒有刪除的問題。
-- 傳輸詳細頁和匯出報告會分別說明空資料夾的清理結果，以及哪些錯誤仍擋住檔案刪除。
+- 傳輸紀錄與詳細頁提供獨立的「匯出分析報告」按鈕，窄螢幕與放大字體也能看到。
+- 單份分析報告最多 100 MB。正常檔案只保留統計，錯誤與只在目標的項目各可保存最多 5,000 筆路徑；省略內容會標明筆數。
+- 同步出錯後的清理報告，新增根目錄下的資料夾數量，以及逐資料夾的保留原因；比對時發現的多餘檔案和最後的刪除結果會分開說明。
 
 <p align="center"><img src="docs/images/transfers-0.7.0.png" width="300" alt="傳輸紀錄：同步方式、來源、目的地與進度"><img src="docs/images/transfer-details-0.7.0.png" width="300" alt="傳輸詳細頁：新增、更新、不用傳、刪除與出錯的數字"></p>
 
@@ -48,7 +48,7 @@ NAS 是區域網路中的檔案儲存設備。App 提供 NAS 常用的檔案分�
 
 APK 是 Android 的安裝包。
 
-1. 從[發布頁](https://github.com/jason840709/RcloneBrowserNextMobile/releases/tag/v0.7.5)下載 APK，在 ARM64 手機上安裝。
+1. 從[發布頁](https://github.com/jason840709/RcloneBrowserNextMobile/releases/tag/v0.7.6)下載 APK，在 ARM64 手機上安裝。
 2. 第一次開啟時，按「允許檔案存取」完成系統授權。開始傳輸時可允許顯示通知。
 3. 點窗格左上角的手機或雲朵圖示，選擇位置、新增連線，或匯入 rclone 設定。
 4. 長按選取檔案，按「複製」或「移動」，前往目的資料夾後按「貼上」。雙窗格可直接傳送到另一側。
@@ -61,7 +61,7 @@ APK 是 Android 的安裝包。
 
 - [使用手冊](docs/USER_GUIDE.zh-TW.md)：瀏覽、複製、移動、同步與連線設定。
 - [建置說明](docs/BUILD.md)：取得引擎、編譯、簽章與輸出位置。
-- [0.7.5 發布說明](docs/RELEASE_0.7.5.md)：版本內容、需求與已知限制。
+- [0.7.6 發布說明](docs/RELEASE_0.7.6.md)：版本內容、需求與已知限制。
 
 回報問題時，請提供 App 版本、Android 版本、連線類型與重現步驟。請勿張貼密碼、權杖或完整的個人連線設定。
 

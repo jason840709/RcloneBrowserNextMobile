@@ -21,12 +21,6 @@ import java.util.Date;
 import java.util.Locale;
 
  
-
-
-
-
-
-
 final class TransferPages {
     private TransferPages() {}
 
@@ -99,9 +93,6 @@ final class TransferPages {
     }
 
      
-
-
-
     static String countsLine(JSONObject r, JSONObject sum) {
         if (sum == null || sum.length() == 0) return "";
         String kind = r.optString("kind");
@@ -161,9 +152,6 @@ final class TransferPages {
     }
 
      
-
-
-
     static boolean timeWarning(Context c, JSONObject r) {
         return r.has("timeNotKept") && Settings.compare(c) == Settings.COMPARE_DEFAULT;
     }
@@ -173,6 +161,14 @@ final class TransferPages {
         long s = r.optLong("started"), e = r.optLong("ended");
         if (s > 0 && e >= s) return e - s;
         return (long) (sum == null ? 0 : sum.optDouble("elapsed", 0) * 1000);
+    }
+
+    private static TextView exportButton(Context c, Host host, String id) {
+        TextView b = Ui.button(c, "匯出分析報告", Ui.ButtonStyle.TONAL, v -> host.exportReport(id));
+        b.setSingleLine(false);
+        b.setMinimumHeight(Ui.dp(48));
+        b.setContentDescription("匯出這筆傳輸的分析報告，包含錯誤與未刪除原因，單份最多 100 MB");
+        return b;
     }
 
      
@@ -506,6 +502,7 @@ final class TransferPages {
             foot.addView(Ui.text(c, "看詳細", 13, Ui.primary));
             foot.addView(Ui.icon(c, R.drawable.ic_chevron_right, Ui.primary), new LinearLayout.LayoutParams(Ui.dp(18), Ui.dp(18)));
             card.addView(foot, gap(6));
+            card.addView(exportButton(c, host, r.optString("id")), gap(12));
             card.setContentDescription(r.optString("name") + "，" + method(r) + "，" + state + "，"
                     + (isOld(r) ? "舊版紀錄" : "從" + host.place(r.optString("src")) + "到" + host.place(r.optString("dst"))) + "，" + counts + "，" + when + "，查看詳細結果");
             return card;
@@ -678,12 +675,19 @@ final class TransferPages {
                 }
                 View spacer = new View(c);
                 actions.addView(spacer, Ui.weight(1));
-                TextView export = Ui.button(c, "匯出報告", Ui.ButtonStyle.TEXT, v -> host.exportReport(r.optString("id")));
-                export.setContentDescription("把這筆傳輸的完整結果和出錯原因存成文字檔，可以分享出去分析");
-                actions.addView(export);
                 TextView del = Ui.button(c, "刪除紀錄", Ui.ButtonStyle.TEXT, v -> host.deleteRecord(r));
                 del.setContentDescription("刪除這筆紀錄，不會動到任何檔案");
                 actions.addView(del);
+            }
+            if (!running && !waiting) {
+                TextView export = exportButton(c, host, r.optString("id"));
+                LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(-1, -2);
+                ep.leftMargin = ep.rightMargin = Ui.dp(24);
+                ep.topMargin = Ui.dp(12);
+                content.addView(export, ep);
+                TextView help = Ui.text(c, "包含錯誤與未刪除原因，單份最多 100 MB。", 13, Ui.muted);
+                help.setPadding(Ui.dp(24), Ui.dp(6), Ui.dp(24), 0);
+                content.addView(help);
             }
             content.addView(actions);
 
@@ -795,7 +799,7 @@ final class TransferPages {
                         + "\n原文：" + why.optString("msg");
                 warnings.addView(notice(R.drawable.ic_info, Ui.error, "有錯誤可能讓清單不完整，目的地多出的 " + MainActivity.count(n(sum, "onlyDst")) + " 個檔案這次沒有刪除",
                         "清單不完整時，沒讀到的檔案看起來就像不存在，照刪會刪錯。只是個別檔案寫不進去時，不會擋住刪除。" + reason
-                        + "\n如果這個錯誤其實不影響清單，請按上方「匯出報告」把報告傳給開發者。", null, null));
+                        + "\n如果這個錯誤其實不影響清單，請按上方「匯出分析報告」把報告傳給開發者。", null, null));
             }
             if (sum != null && sum.optBoolean("deletedAnyway") && n(sum, "deleted") + n(sum, "removedDirs") > 0) {
                 long files = n(sum, "deleted"), dirs = n(sum, "removedDirs"), keptDirs = n(sum, "keptDirs");

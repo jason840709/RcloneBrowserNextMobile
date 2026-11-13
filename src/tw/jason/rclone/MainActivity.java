@@ -42,11 +42,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Screen coordinator. Holds the two browsing windows, the clipboard and the view mode, and turns
- * user actions into calls on {@link FileOps} and {@link TransferService}. Views are built once and
- * updated in place, so state changes animate instead of rebuilding the screen.
- */
+ 
 public class MainActivity extends Activity implements PaneView.Host {
     static final int SINGLE = 0, TABS = 1, SPLIT = 2;
     private static final int SORT_NAME = 0, SORT_DATE = 1, SORT_SIZE = 2;
@@ -74,7 +70,7 @@ public class MainActivity extends Activity implements PaneView.Host {
     private TransferUi.Pill pill;
     private TextView snackbar;
     Overlay overlay;
-    /** Transfer pages (0.7.0); null when closed. */
+     
     private TransferPages.ListPage transferList;
     private TransferPages.DetailPage transferDetail;
 
@@ -88,10 +84,10 @@ public class MainActivity extends Activity implements PaneView.Host {
     private boolean neededAccess;
     private Runnable hidePill, hideSnack;
 
-    // ============================================================================================
-    // Lifecycle
+     
+     
 
-    /** Applies the light/dark choice from Settings before any resource is read. */
+     
     @Override protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
         applyNightOverride(this, base);
@@ -101,14 +97,14 @@ public class MainActivity extends Activity implements PaneView.Host {
         int night = Settings.night(base);
         if (night == Settings.NIGHT_SYSTEM) return;
         Configuration c = new Configuration();
-        c.fontScale = 0; // keep the user's font size; only the night flag is overridden
+        c.fontScale = 0;  
         int current = base.getResources().getConfiguration().uiMode;
         c.uiMode = (current & ~Configuration.UI_MODE_NIGHT_MASK)
                 | (night == Settings.NIGHT_DARK ? Configuration.UI_MODE_NIGHT_YES : Configuration.UI_MODE_NIGHT_NO);
         activity.applyOverrideConfiguration(c);
     }
 
-    /** Settings that need a fresh screen when they change. */
+     
     private String lookKey() {
         return Settings.accent(this) + "|" + Settings.night(this) + "|" + Settings.dense(this);
     }
@@ -209,8 +205,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         if (mode == SPLIT) layoutMode(false);
     }
 
-    // ============================================================================================
-    // Window and layout
+     
+     
 
     private void setupWindow() {
         setupWindow(this);
@@ -221,7 +217,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Ui.surface));
         if (Build.VERSION.SDK_INT >= 30) {
             w.setDecorFitsSystemWindows(false);
-            w.getDecorView(); // the insets controller exists only after the decor view is created
+            w.getDecorView();  
             android.view.WindowInsetsController ic = w.getInsetsController();
             if (ic != null) {
                 int light = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
@@ -234,7 +230,7 @@ public class MainActivity extends Activity implements PaneView.Host {
                 if (Build.VERSION.SDK_INT >= 27) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
             }
             w.getDecorView().setSystemUiVisibility(flags);
-            // Android 8.0 cannot draw dark navigation buttons, so keep a scrim behind them.
+             
             if (Build.VERSION.SDK_INT < 27 && !Ui.dark) w.setNavigationBarColor(0x66000000);
         }
     }
@@ -272,7 +268,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         snackbar.setBackground(Ui.round(Ui.inverseSurface, 12));
         snackbar.setPadding(Ui.dp(16), Ui.dp(14), Ui.dp(16), Ui.dp(14));
         snackbar.setElevation(Ui.dp(6));
-        // Above sheets and dialogs (the overlay sits at 32dp), so messages from inside a sheet are seen.
+         
         snackbar.setTranslationZ(Ui.dp(40));
         snackbar.setVisibility(View.GONE);
         snackbar.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
@@ -326,7 +322,7 @@ public class MainActivity extends Activity implements PaneView.Host {
 
     boolean isLandscape() { return getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE; }
 
-    /** Places the two windows for the current mode. Pane views are reused, never rebuilt. */
+     
     void layoutMode(boolean animate) {
         for (PaneView p : panes) { ViewGroup parent = (ViewGroup) p.getParent(); if (parent != null) parent.removeView(p); }
         if (divider.getParent() != null) ((ViewGroup) divider.getParent()).removeView(divider);
@@ -367,7 +363,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         layoutMode(true);
     }
 
-    // ---- Tabs ---------------------------------------------------------------------------------
+     
 
     private LinearLayout buildTabStrip() {
         LinearLayout strip = Ui.row(this);
@@ -401,7 +397,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         PaneView from = panes[active], to = panes[k];
         active = k;
         if (mode == TABS) {
-            // Cancel first: a pending end action from a quick earlier switch must not hide the new tab.
+             
             from.animate().cancel();
             to.animate().cancel();
             from.setAlpha(1f);
@@ -430,12 +426,12 @@ public class MainActivity extends Activity implements PaneView.Host {
         }
     }
 
-    // ---- Split divider ------------------------------------------------------------------------
+     
 
     private LinearLayout buildDivider() {
         LinearLayout d = new LinearLayout(this);
         d.setGravity(Gravity.CENTER);
-        // Same purple family as the active header, strong enough to read as the boundary between windows.
+         
         d.setBackgroundColor(Ui.splitBar);
         LinearLayout swap = Ui.row(this);
         swap.setGravity(Gravity.CENTER);
@@ -456,7 +452,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         LinearLayout sync = Ui.row(this);
         sync.setGravity(Gravity.CENTER);
         sync.setPadding(Ui.dp(12), 0, Ui.dp(14), 0);
-        // A filled chip so it reads as a button that opens something, not a status label.
+         
         sync.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(Ui.alpha(Ui.onSplitBar, .25f)),
                 Ui.round(Ui.alpha(Ui.onSplitBar, .18f), 18), Ui.round(0xffffffff, 18)));
         syncButtonIcon = Ui.icon(this, R.drawable.ic_sync, Ui.onSplitBar);
@@ -467,7 +463,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         sync.setOnClickListener(v -> openSync());
         sync.setTag("sync");
         d.addView(sync);
-        // Drag anywhere on the divider (outside its buttons) to resize the two windows.
+         
         d.setOnTouchListener(new View.OnTouchListener() {
             float startRatio, start;
             @Override public boolean onTouch(View v, MotionEvent e) {
@@ -514,7 +510,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         sp.rightMargin = landscape ? 0 : Ui.dp(8);
         sync.setLayoutParams(sp);
         sync.setPadding(Ui.dp(landscape ? 14 : 12), 0, Ui.dp(14), 0);
-        // Push the sync button to the far end and keep the handle centred.
+         
         divider.removeView(handle);
         divider.removeView(sync);
         View spacerA = new View(this), spacerB = new View(this);
@@ -558,8 +554,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         if (mode == SPLIT) updateSyncButton();
     }
 
-    // ============================================================================================
-    // Bottom bars, pill and snackbar
+     
+     
 
     void updateBars() {
         PaneView p = panes[active];
@@ -591,7 +587,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         return show;
     }
 
-    /** Lists keep their last rows reachable above whatever floats at the bottom. */
+     
     private void updateBottomSpace() {
         int bar = selectionBarShown ? selectionBar.getHeight() : clipBarShown ? clipBar.getHeight() : 0;
         if ((selectionBarShown || clipBarShown) && bar == 0) bar = Ui.dp(68) + insetNav;
@@ -695,8 +691,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         handler.postDelayed(hideSnack, 3200);
     }
 
-    // ============================================================================================
-    // PaneView.Host
+     
+     
 
     @Override public void activate(PaneView p) {
         if (panes[active] == p) return;
@@ -738,7 +734,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         load(p, path, isAncestor(path, p.path) ? -1 : 1);
     }
 
-    /** Stops waiting for a slow folder; the pane keeps showing the folder it had. */
+     
     @Override public void cancelLoad(PaneView p) {
         p.generation++;
         p.setLoading(false);
@@ -788,7 +784,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         return v != null && v.root.equals(root) ? v.label : root;
     }
 
-    /** Volume root for a local path ("/" when it is outside every volume); the remote name for remotes. */
+     
     @Override public String localRoot(String path) {
         if (!FileOps.isLocal(path)) return path.substring(0, path.indexOf(':') + 1);
         Storage.Volume v = Storage.volumeFor(this, path);
@@ -817,7 +813,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         };
     }
 
-    /** Name order that puts "2" before "10", case-insensitive. */
+     
     static int natural(String a, String b) {
         int i = 0, j = 0;
         while (i < a.length() && j < b.length()) {
@@ -841,8 +837,8 @@ public class MainActivity extends Activity implements PaneView.Host {
 
     @Override public boolean showHidden() { return hidden; }
 
-    // ============================================================================================
-    // Loading
+     
+     
 
     void load(PaneView p, String destination, int direction) {
         final int generation = ++p.generation;
@@ -892,8 +888,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         });
     }
 
-    // ============================================================================================
-    // File actions
+     
+     
 
     void toClipboard(PaneView p, boolean move) {
         clipboard.clear();
@@ -1049,12 +1045,12 @@ public class MainActivity extends Activity implements PaneView.Host {
         return path.equals(v.root) ? v.label : v.label + "/" + path.substring(v.root.length() + 1);
     }
 
-    // ============================================================================================
-    // Sync (split view)
+     
+     
 
     static final int SYNC_FILL = 0, SYNC_MIRROR = 1;
 
-    /** Opens the sync sheet. Choosing and previewing never touch files; only the final button queues work. */
+     
     void openSync() {
         PaneView from = panes[active], to = panes[1 - active];
         if (from.loading || to.loading || !from.error.isEmpty() || !to.error.isEmpty()) { message(null, "等兩邊的資料夾都讀取完成再同步。"); return; }
@@ -1063,10 +1059,10 @@ public class MainActivity extends Activity implements PaneView.Host {
         new SyncSheet(from.path, to.path).show();
     }
 
-    /** Name of the last path part, or the location name at a root, e.g. "Download", "本機", "nas". */
+     
     String placeName(String path) { return panes[0].label(path); }
 
-    /** The comparison now running in a sync sheet, stopped when the screen closes. */
+     
     private SyncCompare runningCompare;
 
     private void keepScreenOn(boolean on) {
@@ -1074,10 +1070,10 @@ public class MainActivity extends Activity implements PaneView.Host {
         else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
-    /** "12,345" */
+     
     static String count(long n) { return String.format(java.util.Locale.US, "%,d", n); }
 
-    /** "45 秒", "3 分 12 秒", "1 小時 5 分" */
+     
     static String duration(long ms) {
         long s = Math.max(0, ms / 1000);
         if (s < 60) return s + " 秒";
@@ -1088,9 +1084,9 @@ public class MainActivity extends Activity implements PaneView.Host {
     private final class SyncSheet {
         String src, dst;
         int mode = getPreferences(0).getInt("syncMode", SYNC_FILL);
-        /** Opened from a saved job or a record: the method and direction are fixed and not stored as the new default. */
+         
         boolean fixed;
-        /** Opened from a saved job: it is already saved, so the sheet does not offer to save it. */
+         
         boolean fromSavedJob;
         final LinearLayout content = Ui.column(MainActivity.this);
         final TextView title;
@@ -1098,7 +1094,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         Overlay.Sheet sheet;
         int run;
         SyncCompare compare;
-        /** Runs after the work is queued; a saved job uses it to note when it last ran. */
+         
         Runnable onStart;
 
         SyncSheet(String from, String to) {
@@ -1115,8 +1111,8 @@ public class MainActivity extends Activity implements PaneView.Host {
 
         void show() {
             settings();
-            // 0.7.0: the buttons stay below the scrolling part, so "直接開始" and "先比對" are always on screen,
-            // however tall the settings get (the comparison row made them taller than some phones).
+             
+             
             LinearLayout frame = Ui.column(MainActivity.this);
             frame.addView(scroll(content), new LinearLayout.LayoutParams(-1, 0, 1));
             frame.addView(buttons, new LinearLayout.LayoutParams(-1, -2));
@@ -1125,7 +1121,7 @@ public class MainActivity extends Activity implements PaneView.Host {
             sheet.show();
         }
 
-        /** From a saved job or a record: the method is already chosen; the user still picks compare first or start now. */
+         
         void showFixed(int method, boolean savedJob) {
             fixed = true;
             fromSavedJob = savedJob;
@@ -1167,14 +1163,14 @@ public class MainActivity extends Activity implements PaneView.Host {
             route.addView(routeEnd(locationIcon(dst), placeName(dst), "目的地"), new LinearLayout.LayoutParams(0, -2, 1));
         }
 
-        /** Step 1: direction and method, then start now or compare first. */
+         
         void settings() {
             run++;
             stopCompare();
             title.setText("同步設定");
             drawRoute(!fixed);
             body.removeAllViews();
-            // Rule for every sync method: the source is never changed; only the destination is.
+             
             TextView rule = Ui.title(MainActivity.this, "「" + placeName(src) + "」不會被改動，只有「" + placeName(dst) + "」會變。", 14, Ui.onPrimaryContainer);
             rule.setBackground(Ui.round(Ui.primaryContainer, 12));
             rule.setPadding(Ui.dp(14), Ui.dp(10), Ui.dp(14), Ui.dp(10));
@@ -1217,7 +1213,7 @@ public class MainActivity extends Activity implements PaneView.Host {
             buttons.addView(first, marginLeft(8));
         }
 
-        /** 0.7.0: how "different" is decided, with a way to change it; the same setting as in the settings screen. */
+         
         private View compareRow() {
             LinearLayout row = Ui.row(MainActivity.this);
             row.setPadding(Ui.dp(16), Ui.dp(6), Ui.dp(4), Ui.dp(6));
@@ -1282,7 +1278,7 @@ public class MainActivity extends Activity implements PaneView.Host {
             return card;
         }
 
-        /** "直接開始": filling in never deletes or overwrites, so it starts at once; mirroring asks first. */
+         
         private void startWithoutCompare() {
             final String from = src, to = dst;
             final int chosen = mode;
@@ -1305,7 +1301,7 @@ public class MainActivity extends Activity implements PaneView.Host {
             });
         }
 
-        /** Step 2: dry run with live counts; then list the changes and offer the one button that queues the work. */
+         
         void preview() {
             final int ticket = ++run;
             final String from = src, to = dst;
@@ -1432,12 +1428,12 @@ public class MainActivity extends Activity implements PaneView.Host {
             for (FileOps.SyncChange ch : r.shown) listBox.addView(changeRow(ch, chosen == SYNC_FILL));
             ScrollView sv = new ScrollView(MainActivity.this);
             sv.addView(listBox);
-            // Short enough that the start button stays on screen on a phone; the list scrolls inside.
+             
             LinearLayout.LayoutParams svp = new LinearLayout.LayoutParams(-1, Math.min(Ui.dp(r.hidden() > 0 ? 220 : 264), Ui.dp(44) * r.shown.size() + Ui.dp(8)));
             svp.topMargin = Ui.dp(6);
             body.addView(sv, svp);
             if (r.hidden() > 0) {
-                // Deletions are listed first, up to their own limit; say so when some of them are not listed.
+                 
                 String deletes = s.deletes > r.shownDeletes ? "；要刪除的 " + count(s.deletes) + " 項只列出前 " + count(r.shownDeletes) + " 項" : "";
                 TextView more = Ui.text(MainActivity.this, "共 " + count(s.changes()) + " 項變更，畫面只列出 " + count(r.shown.size()) + " 項" + deletes + "。沒列出的也會照樣處理。", 13, Ui.muted);
                 more.setLineSpacing(0, 1.2f);
@@ -1519,8 +1515,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         return lp;
     }
 
-    // ============================================================================================
-    // Locations and connections
+     
+     
 
     @Override public void showLocations(PaneView p, View anchor) {
         Storage.invalidate();
@@ -1565,7 +1561,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         holder[0] = overlay.new Sheet(scroll(c)).show();
     }
 
-    /** Storage row with free space and a usage bar. */
+     
     private View volumeRow(PaneView p, Storage.Volume v, Overlay.Sheet[] holder) {
         String space = v.total > 0 ? "可用 " + FileOps.size(v.free) + "，共 " + FileOps.size(v.total) : null;
         boolean here = localRoot(p.path).equals(v.root);
@@ -1590,8 +1586,8 @@ public class MainActivity extends Activity implements PaneView.Host {
     }
 
     private View locationRow(PaneView p, int icon, String title, String subtitle, String target, Overlay.Sheet[] holder, View trailing) {
-        // Connections mark the one the window is inside; bookmarks only mark an exact match, so a
-        // folder and its bookmarked parent are never highlighted at the same time.
+         
+         
         boolean current = target.endsWith(":") ? p.path.equals(target) || isAncestor(target, p.path) : p.path.equals(target);
         LinearLayout row = overlay.sheetRow(icon, current ? Ui.primary : Ui.primaryContainer, current ? Ui.onPrimary : Ui.primary, title, subtitle, trailing,
                 v -> { holder[0].dismiss(); if (!p.path.equals(target)) load(p, target, isAncestor(target, p.path) ? -1 : 1); });
@@ -1765,7 +1761,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         });
     }
 
-    /** After the connection list is replaced, drop anything that pointed at the old connections. */
+     
     void afterConfigReplaced() {
         clipboard.clear();
         for (PaneView p : panes) {
@@ -1781,8 +1777,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         updateBars();
     }
 
-    // ============================================================================================
-    // Menu
+     
+     
 
     @Override public void showMenu(PaneView p, View anchor) {
         final Overlay.Menu m = overlay.new Menu(anchor);
@@ -1907,7 +1903,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         d.button("前往", Ui.ButtonStyle.FILLED, () -> {
             String s = edit.getText().toString().trim();
             if (s.isEmpty()) { edit.setError("請輸入路徑。"); return; }
-            // "/sdcard/..." and other aliases point at the same storage; show it under 手機.
+             
             if (FileOps.isLocal(s)) {
                 try {
                     String real = new java.io.File(s).getCanonicalPath();
@@ -1921,10 +1917,10 @@ public class MainActivity extends Activity implements PaneView.Host {
         Overlay.showKeyboard(edit);
     }
 
-    // ============================================================================================
-    // Transfers
+     
+     
 
-    /** The transfer list page (0.7.0; up to 0.6.0 a bottom sheet). */
+     
     void showTransfers() {
         if (transferList != null) return;
         transferList = new TransferPages.ListPage(this, overlay, pages);
@@ -1932,11 +1928,14 @@ public class MainActivity extends Activity implements PaneView.Host {
         transferList.page.show();
     }
 
-    /** Share sheet for a file on the phone's own storage (0.7.3, used for transfer reports). */
+     
+    private boolean exportingReport;
+
     private void shareFile(java.io.File f) {
         Uri u = new Uri.Builder().scheme("content").authority("tw.jason.rclone.files").path(f.getAbsolutePath()).build();
         Intent in = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM, u).putExtra(Intent.EXTRA_SUBJECT, f.getName())
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        in.setClipData(android.content.ClipData.newRawUri("傳輸分析報告", u));
         try { startActivity(Intent.createChooser(in, "分享報告")); } catch (Exception e) { message(null, "手機裡沒有能分享檔案的 App。"); }
     }
 
@@ -1957,14 +1956,14 @@ public class MainActivity extends Activity implements PaneView.Host {
         }
         @Override public void cancelJob(JSONObject job, boolean running) {
             String id = job.optString("id"), name = job.optString("name");
-            // A waiting job has not touched any file yet, so it goes without asking.
+             
             if (!running) { cancelled(TransferService.cancel(id), name); return; }
             boolean others = TransferService.queue().length() > 1;
             overlay.new Dialog("取消「" + name + "」？", "已經傳完的檔案會保留，還沒傳的不會再傳。" + (others ? "排隊中的下一項會接著開始。" : ""))
                     .action("繼續傳輸", Ui.ButtonStyle.TEXT, null)
                     .action("取消這一項", Ui.ButtonStyle.DANGER, () -> cancelled(TransferService.cancel(id), name)).show();
         }
-        /** The job may have ended while the user decided; say so instead of doing nothing. */
+         
         private void cancelled(boolean ok, String name) {
             snack(ok ? "已取消「" + name + "」" : "「" + name + "」已經結束，沒有取消");
         }
@@ -1977,7 +1976,7 @@ public class MainActivity extends Activity implements PaneView.Host {
                     }).show();
         }
         @Override public void runAgain(JSONObject r) {
-            // After it is queued, go back to the list so the new job is in view.
+             
             runTransfer(r.optString("src"), r.optString("dst"), r.optBoolean("directory"), r.optString("kind"), false,
                     () -> { if (transferDetail != null) transferDetail.page.dismiss(); });
         }
@@ -2000,20 +1999,25 @@ public class MainActivity extends Activity implements PaneView.Host {
         }
         @Override public void openDetail(String id) { showTransferDetail(id); }
         @Override public void exportReport(String id) {
-            snack("正在產生報告…");
+            if (exportingReport) { snack("報告正在產生，請稍候…"); return; }
+            exportingReport = true;
+            snack("正在產生分析報告，不會重新掃描檔案…");
             new Thread(() -> {
                 try {
                     java.io.File f = ReportExport.export(MainActivity.this, id);
-                    handler.post(() -> overlay.new Dialog("報告已存好", "存在「" + displayPath(f.getAbsolutePath()) + "」。\n裡面有這次傳輸的設定、各項數字、沒有刪除的原因、每一種錯誤的原始訊息和檔案清單；不含密碼和連線設定。")
+                    handler.post(() -> {
+                        exportingReport = false;
+                        overlay.new Dialog("分析報告已存好", "大小：" + FileOps.size(f.length()) + "。\n已存到 Download／RcloneNext報告。\n包含錯誤與未刪除原因，單份最多 100 MB。可按「分享」傳出文字檔。")
                             .action("知道了", Ui.ButtonStyle.TEXT, null)
-                            .action("分享", Ui.ButtonStyle.FILLED, () -> shareFile(f)).show());
-                } catch (Exception e) { handler.post(() -> message("無法產生報告", String.valueOf(e.getMessage()))); }
+                            .action("分享", Ui.ButtonStyle.FILLED, () -> shareFile(f)).show();
+                    });
+                } catch (Exception e) { handler.post(() -> { exportingReport = false; message("無法產生報告", String.valueOf(e.getMessage())); }); }
             }, "export-report").start();
         }
     };
 
-    // ============================================================================================
-    // Saved jobs ("常用工作")
+     
+     
 
     static String kindLabel(String kind) {
         switch (kind) {
@@ -2034,9 +2038,9 @@ public class MainActivity extends Activity implements PaneView.Host {
 
     private void saveJob(String src, String dst, boolean directory, String kind) { saveJob(src, dst, directory, kind, null); }
 
-    /** onSaved runs after a successful save, e.g. so the sync sheet can show that it is saved. */
+     
     private void saveJob(String src, String dst, boolean directory, String kind, Runnable onSaved) {
-        // Copy and move store the full target path (folder + item name); name the folder instead.
+         
         boolean sync = TransferService.FILL.equals(kind) || TransferService.MIRROR.equals(kind);
         EditText edit = field(placeName(src) + " → " + placeName(sync ? dst : parent(dst)), "名稱", false);
         edit.selectAll();
@@ -2116,7 +2120,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         LinearLayout texts = Ui.column(this);
         texts.addView(Ui.oneLine(Ui.title(this, job.name, 16, Ui.ink), TextUtils.TruncateAt.END));
         texts.addView(Ui.oneLine(Ui.text(this, kindLabel(job.kind), 13, Ui.muted), TextUtils.TruncateAt.END));
-        // Two lines cut from the start, so the folder names that tell jobs apart stay visible.
+         
         String from = displayPath(job.src), to = displayPath(job.isSync() ? job.dst : parent(job.dst));
         texts.addView(routeLine("從", from));
         texts.addView(routeLine("到", to));
@@ -2141,7 +2145,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         return r;
     }
 
-    /** "從" or "到" stays whole; the path is cut from the start so its last folders remain readable. */
+     
     private View routeLine(String label, String path) {
         LinearLayout line = Ui.row(this);
         TextView l = Ui.text(this, label + " ", 13, Ui.muted);
@@ -2177,11 +2181,7 @@ public class MainActivity extends Activity implements PaneView.Host {
                 }).show();
     }
 
-    /**
-     * Runs a transfer again from its paths: a saved job or a finished record. Copy goes straight to the
-     * queue (it never overwrites), move asks first (it removes the source), and both sync methods open
-     * the sync sheet with the method fixed, where the user compares first or starts at once.
-     */
+     
     void runTransfer(String src, String dst, boolean directory, String kind, boolean savedJob, Runnable onStart) {
         try { TransferService.validateTransfer(src, dst, directory); } catch (Exception e) { error(e); return; }
         if (FileOps.isLocal(src) && !new java.io.File(src).exists()) {
@@ -2240,7 +2240,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         return "傳輸";
     }
 
-    /** After a run of transfers ends, briefly report how it went. */
+     
     private void finishPill() {
         JSONArray rows = TransferService.history(this);
         int failed = 0, cancelled = 0, done = 0, nothingNew = 0;
@@ -2263,8 +2263,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         handler.postDelayed(hidePill, failed > 0 ? 8000 : 4000);
     }
 
-    // ============================================================================================
-    // Helpers
+     
+     
 
     interface Work { Rclone.Result run(); }
     interface Done { void done(Rclone.Result r); }
@@ -2330,7 +2330,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         message(null, e.getMessage() == null ? "操作沒有完成，請再試一次。" : e.getMessage());
     }
 
-    /** When the setting is on and the phone is on mobile data, confirm before a network transfer. */
+     
     void whenNetworkOk(boolean usesNetwork, Runnable go) {
         android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
         android.net.NetworkCapabilities caps = cm == null ? null : cm.getNetworkCapabilities(cm.getActiveNetwork());
@@ -2341,8 +2341,8 @@ public class MainActivity extends Activity implements PaneView.Host {
                 .action("仍要傳輸", Ui.ButtonStyle.FILLED, go).show();
     }
 
-    // ============================================================================================
-    // Back
+     
+     
 
     @Override public void onBackPressed() {
         if (overlay.back()) return;

@@ -6,22 +6,16 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 
  
-
-
-
-
-
-
 public final class ReportExport {
     private ReportExport() {}
 
@@ -31,14 +25,23 @@ public final class ReportExport {
     public static File export(Context c, String id) throws Exception {
         JSONObject d = TransferService.details(c, id);
         if (d == null) throw new IllegalStateException("找不到這筆紀錄");
+        d = (JSONObject) sanitized(d);
         JSONObject r = d.optJSONObject("record");
         JSONObject sum = d.optJSONObject("summary");
-        StringBuilder t = new StringBuilder();
+        File dir = new File(FileOps.DOWNLOADS, FOLDER);
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IllegalStateException("無法在 Download 建立「" + FOLDER + "」資料夾");
+         
+        File f = new File(dir, "傳輸分析報告_" + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date())
+                + "_" + java.util.UUID.randomUUID().toString().substring(0, 8) + ".txt");
+        if (!f.createNewFile()) throw new IllegalStateException("無法建立分析報告");
+        boolean complete = false;
+        try (Writer out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8))) {
+        ReportText t = new ReportText(out);
         String now = new SimpleDateFormat("yyyy/M/d HH:mm:ss", Locale.TAIWAN).format(new Date());
 
-        t.append("Rclone Next 傳輸報告\n").append("產生時間：").append(now).append("\n\n");
+        t.append("Rclone Next 傳輸分析報告\n").append("產生時間：").append(now).append("\n\n");
         t.append("== 環境 ==\n");
-        t.append("App 版本：").append(appVersion(c)).append('\n');
+        t.append("目前 App 版本：").append(appVersion(c)).append('\n');
         t.append("裝置：").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append("，Android ").append(Build.VERSION.RELEASE).append("（API ").append(Build.VERSION.SDK_INT).append("）\n");
         Rclone.Result v = FileOps.version(c);
         t.append("傳輸引擎：").append(v.code == 0 ? v.out.split("\n")[0].trim() : "（讀不到）").append('\n');
@@ -50,6 +53,9 @@ public final class ReportExport {
         } catch (Exception e) { t.append("（讀不到）"); }
         t.append('\n');
 
+        t.append("匯出格式：2；單份上限 100 MB（100,000,000 位元組）。\n");
+        t.append("只讀取這筆工作的既有紀錄，不會重新掃描來源或目的地。正常檔案只保留統計，錯誤與未刪除項目優先保留路徑。\n");
+        t.append("舊工作未保存的路徑無法事後補回；各清單會標明保存筆數與未列筆數。\n");
         t.append("\n== 這次傳輸 ==\n");
         if (r != null) {
             t.append("名稱：").append(r.optString("name")).append('\n');
@@ -69,7 +75,7 @@ public final class ReportExport {
         t.append("\n== 結果 ==\n");
         if (sum == null) t.append("（這筆紀錄沒有記下數字）\n");
         else {
-            String[][] keys = {{"added", "新增"}, {"replaced", "更新（覆蓋）"}, {"moved", "移動"}, {"same", "不用傳／同名略過"}, {"onlyDst", "只在目的地"},
+            String[][] keys = {{"added", "新增"}, {"replaced", "更新（覆蓋）"}, {"moved", "移動"}, {"same", "不用傳／同名略過"}, {"onlyDst", "比對時只在目的地（不代表尚未刪除）"},
                     {"deleted", "已刪除"}, {"removedDirs", "刪除的資料夾"}, {"extraDirs", "App 清理時檢查的資料夾"}, {"keptDirs", "檢查後保留的資料夾"},
                     {"timeOnly", "只更新時間"}, {"skipped", "略過的名稱"}, {"fileErrors", "出錯的檔案"}, {"errors", "rclone 錯誤次數"},
                     {"listed", "兩邊合計讀取"}, {"checks", "已比對"}, {"transfers", "已傳檔案"}, {"bytes", "已傳位元組"}};
@@ -101,7 +107,22 @@ public final class ReportExport {
         JSONArray notes = sum == null ? null : sum.optJSONArray("notes");
         if (notes != null) for (int i = 0; i < notes.length(); i++) t.append("說明：").append(notes.optString(i)).append('\n');
 
-        t.append("\n== 錯誤種類（同一種只算一次，附一則原始訊息）==\n");
+        JSONObject audit = sum == null ? null : sum.optJSONObject("directoryAudit");
+        t.append("\n== 資料夾核對與保留原因 ==\n");
+        if (audit == null) t.append("這筆舊紀錄沒有保存逐資料夾的保留原因，無法事後補回。\n");
+        else {
+            t.append("只計算這次同步根目錄的直屬資料夾，不包含更深層的資料夾。\n");
+            t.append("來源：").append(audit.optLong("sourceTopDirs", -1)).append("；目標清理前：")
+                    .append(audit.optLong("targetTopDirsBefore", -1)).append("；目標清理後：").append(audit.optLong("targetTopDirsAfter", -1)).append("。-1 表示未能完整讀取。\n");
+            JSONArray kept = audit.optJSONArray("keptDetails");
+            if (kept != null) for (int i = 0; i < kept.length(); i++) {
+                JSONArray row = kept.optJSONArray(i);
+                if (row != null) t.append(row.optString(0)).append("｜").append(row.optString(1)).append('\n');
+            }
+            t.append("未逐項列出的保留資料夾：").append(audit.optLong("keptNotListed")).append("。\n");
+        }
+
+        t.append("\n== 錯誤種類（依原因分組，次數包含重試與結束訊息）==\n");
         JSONArray kinds = d.optJSONArray("errorKinds");
         if (kinds == null || kinds.length() == 0) t.append("（沒有錯誤，或這筆紀錄是 0.7.3 以前的，沒有記下種類）\n");
         else for (int i = 0; i < kinds.length(); i++) {
@@ -112,21 +133,24 @@ public final class ReportExport {
          
         JSONArray folders = d.optJSONArray("errorFolders");
         if (folders != null && folders.length() > 0) {
-            t.append("\n== 出錯的資料夾（全部，每個資料夾一行）==\n");
+            t.append("\n== 出錯的資料夾（已保存明細，每個資料夾一行，最多 300 個）==\n");
             for (int i = 0; i < folders.length(); i++) {
-                JSONObject f = folders.optJSONObject(i);
-                String name = f.optString("folder");
-                t.append(MainActivity.count(f.optLong("count"))).append(" 個｜").append(name.isEmpty() ? "（最上層）" : name).append("\n　").append(f.optString("reason")).append('\n');
+                JSONObject folder = folders.optJSONObject(i);
+                String name = folder.optString("folder");
+                t.append(MainActivity.count(folder.optLong("count"))).append(" 個｜").append(name.isEmpty() ? "（最上層）" : name).append("\n　").append(folder.optString("reason")).append('\n');
             }
         }
 
         JSONObject lists = d.optJSONObject("lists");
         if (lists != null) {
-            String[][] groups = {{"errors", "出錯"}, {"skipped", "略過的名稱"}, {"onlyDst", "只在目的地"}, {"deleted", "已刪除"}, {"dirs", "刪除的資料夾"}, {"added", "新增"}, {"replaced", "更新"}, {"moved", "移動"}, {"same", "不用傳／同名略過"}};
+            String[][] groups = {{"errors", "出錯", "fileErrors"}, {"skipped", "略過的名稱", "skipped"}, {"onlyDst", "比對時只在目的地，刪除結果見上方", "onlyDst"}, {"dirs", "刪除的資料夾", "removedDirs"}};
             for (String[] g : groups) {
                 JSONArray a = lists.optJSONArray(g[0]);
-                if (a == null || a.length() == 0) continue;
-                t.append("\n== 檔案：").append(g[1]).append("（記下 ").append(a.length()).append(" 項，每類最多 ").append(TransferReport.KEEP).append(" 項）==\n");
+                int kept = a == null ? 0 : a.length();
+                long total = sum == null ? kept : sum.optLong(g[2], kept);
+                t.append("\n== 檔案：").append(g[1]).append("（統計 ").append(total).append(" 筆，保存 ").append(kept)
+                        .append(" 筆，未列 ").append(Math.max(0, total - kept)).append(" 筆）==\n");
+                if (a == null) continue;
                 for (int i = 0; i < a.length(); i++) {
                     JSONArray e = a.optJSONArray(i);
                     if (e == null) continue;
@@ -141,15 +165,35 @@ public final class ReportExport {
         t.append("\n== 原始資料（JSON）==\n");
         JSONObject raw = new JSONObject();
         raw.put("record", r).put("summary", sum).put("errorKinds", kinds).put("errorFolders", folders);
-        t.append(raw.toString(1)).append('\n');
-
-        File dir = new File(FileOps.DOWNLOADS, FOLDER);
-        if (!dir.isDirectory() && !dir.mkdirs()) throw new IllegalStateException("無法在 Download 建立「" + FOLDER + "」資料夾");
-        String name = (r == null ? "傳輸" : r.optString("name")).replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_");
-        if (name.length() > 40) name = name.substring(0, 40);
-        File f = new File(dir, "傳輸報告_" + name + "_" + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date()) + ".txt");
-        try (Writer w = new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8)) { w.write(t.toString()); }
+        raw.put("formatVersion", 2).put("maxBytes", ReportText.MAX_BYTES);
+        t.block(raw.toString(1) + "\n");
+        t.finish();
+        out.close();
+        complete = true;
+        } finally {
+            if (!complete) f.delete();
+        }
+        if (f.length() > ReportText.MAX_BYTES) { f.delete(); throw new IllegalStateException("報告超過容量上限"); }
         return f;
+    }
+
+    private static Object sanitized(Object value) throws Exception {
+        if (value instanceof JSONObject) {
+            JSONObject out = new JSONObject(), object = (JSONObject) value;
+            java.util.Iterator<String> keys = object.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                if (key.matches("(?i)password|pass|token|access_token|secret|authorization|config")) continue;
+                out.put(key, sanitized(object.opt(key)));
+            }
+            return out;
+        }
+        if (value instanceof JSONArray) {
+            JSONArray out = new JSONArray(), array = (JSONArray) value;
+            for (int i = 0; i < array.length(); i++) out.put(sanitized(array.opt(i)));
+            return out;
+        }
+        return value instanceof String ? ReportPrivacy.redact((String) value) : value;
     }
 
     private static String appVersion(Context c) {

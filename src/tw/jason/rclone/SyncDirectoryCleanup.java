@@ -21,6 +21,12 @@ final class SyncDirectoryCleanup {
         final ArrayList<String> removed = new ArrayList<>();
         long checked, kept;
         String problem = "";
+        final JSONArray keptDetails = new JSONArray();
+        long sourceTopDirs = -1, targetTopDirsBefore = -1, targetTopDirsAfter = -1;
+        void keep(String path, String reason) {
+            kept++;
+            if (keptDetails.length() < 500) keptDetails.put(new JSONArray().put(path).put(reason));
+        }
     }
 
     static Result run(Context context, String source, String destination, Set<String> knownSourceDirs,
@@ -36,6 +42,14 @@ final class SyncDirectoryCleanup {
             for (String path : directories) if (!knownSourceDirs.contains(path)) candidates.add(path);
             candidates.sort((a,b) -> { int n = depth(b)-depth(a); return n != 0 ? n : a.compareTo(b); });
             SourceIndex index = new SourceIndex(context, source);
+            Map<String,Boolean> sourceRoot = index.children("");
+            if (sourceRoot != null) {
+                result.sourceTopDirs = 0;
+                for (Boolean dir : sourceRoot.values()) if (dir) result.sourceTopDirs++;
+            }
+            result.targetTopDirsBefore = 0;
+            for (String path : directories) if (path.indexOf('/') < 0) result.targetTopDirsBefore++;
+            result.targetTopDirsAfter = result.targetTopDirsBefore;
             LocalRoot root = local ? new LocalRoot(context, destination) : null;
             boolean cardFilters = !Settings.cardNameFilters(destination).isEmpty();
             for (String path : candidates) {
@@ -44,16 +58,19 @@ final class SyncDirectoryCleanup {
                  
                 boolean excluded = false;
                 if (cardFilters) for (String part : path.split("/")) if (Settings.cardRefuses(part)) excluded = true;
-                if (excluded) { result.kept++; continue; }
+                if (excluded) { result.keep(path, "本次篩選規則排除這個名稱"); continue; }
                 LocalDirectory empty = root == null ? null : root.empty(path);
-                if (root != null && empty == null) { result.kept++; continue; }
-                if (!index.missing(path) || stopped.getAsBoolean()) { result.kept++; continue; }
+                if (root != null && empty == null) { result.keep(path, root.lastReason); continue; }
+                if (!index.missing(path) || stopped.getAsBoolean()) { result.keep(path, stopped.getAsBoolean() ? "工作已取消" : index.lastReason); continue; }
                 boolean removed;
                 if (root != null) removed = root.remove(path, empty);
                 else removed = Rclone.run(context, 60, "rmdir", "--retries", "1", "--low-level-retries", "1",
                         "--contimeout", Settings.connectTimeout(context), "--timeout", Settings.idleTimeout(context),
                         "--", FileOps.join(destination, path)).code == 0;
-                if (removed) result.removed.add(path); else result.kept++;
+                if (removed) {
+                    result.removed.add(path);
+                    if (path.indexOf('/') < 0) result.targetTopDirsAfter--;
+                } else result.keep(path, "移除空資料夾失敗，或目錄在檢查後已變動");
             }
         } catch (Exception ignored) {
             result.problem = "空資料夾清理沒有完成，未確認的資料夾已保留。請檢查連線與儲存權限後重跑同步。";
@@ -89,6 +106,7 @@ final class SyncDirectoryCleanup {
     private static final class SourceIndex {
         final Context context;
         final String source;
+        String lastReason = "無法確認來源是否存在，保留目標";
         final Map<String,Map<String,Boolean>> parents = new LinkedHashMap<String,Map<String,Boolean>>(16,0.75f,true) {
             @Override protected boolean removeEldestEntry(Map.Entry<String,Map<String,Boolean>> e) { return size()>32; }
         };
@@ -117,15 +135,17 @@ final class SyncDirectoryCleanup {
             String[] parts=path.split("/");
             for (int i=0;i<parts.length;i++) {
                 Map<String,Boolean> names=children(parent);
-                if (names==null) return false;
+                if (names==null) { lastReason = "來源的上層資料夾讀不到，無法確認是否存在"; return false; }
                 String part=parts[i];
                 if (!names.containsKey(part)) {
                      
                     String normalized=Normalizer.normalize(part,Normalizer.Form.NFC);
-                    for (String name:names.keySet()) if (Normalizer.normalize(name,Normalizer.Form.NFC).equalsIgnoreCase(normalized)) return false;
+                    for (String name:names.keySet()) if (Normalizer.normalize(name,Normalizer.Form.NFC).equalsIgnoreCase(normalized)) {
+                        lastReason = "來源存在大小寫或字元正規化相同的名稱"; return false;
+                    }
                     return true;
                 }
-                if (i==parts.length-1 || !names.get(part)) return false;
+                if (i==parts.length-1 || !names.get(part)) { lastReason = "來源有同名項目"; return false; }
                 parent=parent.isEmpty()?part:parent+"/"+part;
             }
             return false;
@@ -142,6 +162,7 @@ final class SyncDirectoryCleanup {
         final Context context;
         final File original, root;
         final LocalDirectory identity;
+        String lastReason = "無法安全讀取目的地資料夾";
         LocalRoot(Context c, String path) throws Exception {
             context=c;
             original=new File(path); root=original.getCanonicalFile();
@@ -163,9 +184,14 @@ final class SyncDirectoryCleanup {
             try {
                 File directory=validated(path);
                 String[] children=directory.list();
-                return children!=null && children.length==0 ? new LocalDirectory(Os.lstat(directory.toString()),
-                        Files.readAttributes(directory.toPath(),BasicFileAttributes.class,LinkOption.NOFOLLOW_LINKS).fileKey()) : null;
-            } catch (Exception ignored) { return null; }
+                if (children == null) { lastReason = "讀取目的地資料夾失敗"; return null; }
+                if (children.length != 0) {
+                    lastReason = "目的地仍有 " + children.length + " 個直屬項目，不能當空資料夾移除";
+                    return null;
+                }
+                return new LocalDirectory(Os.lstat(directory.toString()),
+                        Files.readAttributes(directory.toPath(),BasicFileAttributes.class,LinkOption.NOFOLLOW_LINKS).fileKey());
+            } catch (Exception ignored) { lastReason = "路徑已變動、指向其他位置，或無法安全讀取"; return null; }
         }
         boolean remove(String path, LocalDirectory expected) {
             ArrayList<DirectoryStream<Path>> opened=new ArrayList<>();

@@ -117,10 +117,6 @@ public final class TransferService extends Service {
             .put("src",job.src).put("dst",job.dst).put("directory",job.directory).put("created",job.created).put("started",job.started);
     }
      
-
-
-
-
     public static JSONObject details(Context c,String id) {
         synchronized(LOCK) {
             loadHistory(c);
@@ -373,6 +369,7 @@ public final class TransferService extends Service {
             SyncDirectoryCleanup.Result cleaned=SyncDirectoryCleanup.run(this,job.src,job.dst,sourceDirs,()->job.cancelled || destroyed);
             if(filesAllowed) job.report.cleanedAnyway(cleaned.removed,cleaned.checked,cleaned.kept);
             else job.report.directoriesCleaned(cleaned.removed,cleaned.checked,cleaned.kept);
+            job.report.directoryAudit(cleaned);
             if(!cleaned.problem.isEmpty()) job.report.directoryCleanupProblem(cleaned.problem);
         } catch(Exception ignored) {
             job.report.directoryCleanupProblem("清理沒有完成，請檢查連線與儲存權限後重跑同步。");
@@ -395,11 +392,6 @@ public final class TransferService extends Service {
         return out;
     }
      
-
-
-
-
-
     private void listCardRefused(Job job) {
         Rclone.Result r=Rclone.run(this,120,"lsf","--max-depth","1","--contimeout",Settings.connectTimeout(this),"--timeout",Settings.idleTimeout(this),"--",job.src);
         if(r.code!=0) return;
@@ -417,12 +409,6 @@ public final class TransferService extends Service {
         return a;
     }
      
-
-
-
-
-
-
     private JSONObject timeCheck(Job job) {
         if(!job.directory || !(job.sync || FILL.equals(job.kind))) return null;
         String path=job.report.firstCopied();

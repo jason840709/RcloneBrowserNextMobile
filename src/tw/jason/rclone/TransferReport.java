@@ -10,25 +10,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
  
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 public final class TransferReport {
     public static final int KEEP = 500;
+     
+    public static final int KEEP_ERRORS = 5000;
+    public static int listLimit(String group) {
+        return ERRORS.equals(group) || ONLY_DST.equals(group) || SKIPPED.equals(group) ? KEEP_ERRORS : KEEP;
+    }
      
     public static final String ADDED = "added", REPLACED = "replaced", MOVED = "moved", DELETED = "deleted",
             SAME = "same", ONLY_DST = "onlyDst", ERRORS = "errors",
@@ -49,10 +37,6 @@ public final class TransferReport {
     private int attempt = 1, attempts;
     private boolean deletesSkipped, recovered;
      
-
-
-
-
     private boolean unsafe;
      
     private boolean deletedAnyway;
@@ -60,16 +44,11 @@ public final class TransferReport {
     private String directoryCleanupProblem="";
      
     private JSONObject unsafeReason;
+    private JSONObject directoryAudit;
      
-
-
-
     private final LinkedHashMap<String, long[]> errorKinds = new LinkedHashMap<>();
     private final LinkedHashMap<String, String> errorSamples = new LinkedHashMap<>();
      
-
-
-
     private final LinkedHashMap<String, Object[]> errorFolders = new LinkedHashMap<>();
     private JSONObject stats;
     private final LinkedHashMap<String, ArrayList<JSONArray>> lists = new LinkedHashMap<>();
@@ -183,7 +162,7 @@ public final class TransferReport {
             String odd = unusual(path);
             if (!odd.isEmpty()) plain += "名稱裡不常見的字元：" + odd + "。";
         }
-        if (into.size() < KEEP) into.add(new JSONArray().put(path).put(plain).put(clean(msg)));
+        if (into.size() < KEEP_ERRORS) into.add(new JSONArray().put(path).put(plain).put(clean(msg)));
         String folder = path.contains("/") ? path.substring(0, path.lastIndexOf('/')) : "";
         Object[] f = errorFolders.get(folder);
         if (f == null && errorFolders.size() < 300) errorFolders.put(folder, f = new Object[]{0L, plain});
@@ -191,9 +170,6 @@ public final class TransferReport {
     }
 
      
-
-
-
     static String unusual(String path) {
         java.util.LinkedHashSet<String> found = new java.util.LinkedHashSet<>();
         for (int i = 0; i < path.length(); ) {
@@ -211,10 +187,6 @@ public final class TransferReport {
     }
 
      
-
-
-
-
     static boolean singleFileError(String msg, String objectType) {
          
         if (objectType.endsWith("Directory") && msg.startsWith("Failed to update directory timestamp")) return true;
@@ -232,19 +204,11 @@ public final class TransferReport {
     }
 
      
-
-
-
-
     public synchronized boolean canCleanAnyway() {
         return deletesSkipped && !unsafe && attempt == 1;
     }
 
      
-
-
-
-
     public synchronized void cleanedAnyway(java.util.List<String> removed, long found, long kept) {
         deletedAnyway = true;
         deletesSkipped = false;
@@ -264,6 +228,14 @@ public final class TransferReport {
         directoryCleanupProblem=message;
     }
 
+    synchronized void directoryAudit(SyncDirectoryCleanup.Result result) {
+        try {
+            directoryAudit = new JSONObject().put("sourceTopDirs", result.sourceTopDirs)
+                    .put("targetTopDirsBefore", result.targetTopDirsBefore).put("targetTopDirsAfter", result.targetTopDirsAfter)
+                    .put("keptDetails", result.keptDetails).put("keptNotListed", Math.max(0, result.kept - result.keptDetails.length()));
+        } catch (JSONException ignored) {}
+    }
+
      
     public synchronized void cardNamesLeftOut() { cardNames = true; }
 
@@ -271,14 +243,14 @@ public final class TransferReport {
     public synchronized void skipped(String path, String reason) {
         skipped++;
         ArrayList<JSONArray> into = lists.get(SKIPPED);
-        if (into.size() < KEEP) into.add(new JSONArray().put(path).put(reason));
+        if (into.size() < listLimit(SKIPPED)) into.add(new JSONArray().put(path).put(reason));
     }
 
     private void note(String text) { if (!notes.contains(text)) notes.add(text); }
 
     private void keep(String group, String path, long size) {
         ArrayList<JSONArray> into = lists.get(group);
-        if (into.size() < KEEP) into.add(new JSONArray().put(path).put(size));
+        if (into.size() < listLimit(group)) into.add(new JSONArray().put(path).put(size));
     }
 
      
@@ -303,6 +275,7 @@ public final class TransferReport {
              .put("directoryCleanup", directoryCleanup).put("directoryCleanupProblem", directoryCleanupProblem)
              .put("skipped", skipped).put("extraDirs", extraDirs).put("keptDirs", keptDirs).put("cardNames", cardNames);
             if (unsafeReason != null) o.put("unsafeReason", unsafeReason);
+            if (directoryAudit != null) o.put("directoryAudit", directoryAudit);
             if (stats != null) {
                 for (String k : new String[]{"bytes", "totalBytes", "transfers", "totalTransfers", "checks", "totalChecks", "listed", "deletes", "errors"})
                     o.put(k, stats.optLong(k));
