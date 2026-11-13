@@ -20,19 +20,19 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 
-/**
- * The transfer list page and the detail page of one job (0.7.0). Until 0.6.0 transfers were shown in
- * a bottom sheet that said only the source folder's name and two counts; it did not say which way the
- * files went, which method ran, or what was deleted and skipped. Every card here shows the method and
- * "from → to"; the detail page shows all counts, the settings used and the files of each group,
- * like the desktop app's job list. Both pages read TransferService only and act through {@link Host}.
- */
+ 
+
+
+
+
+
+
 final class TransferPages {
     private TransferPages() {}
 
-    /** What the pages ask the activity to do. Records are TransferService JSON rows. */
+     
     interface Host {
-        /** Location as the user sees it, e.g. "內部儲存空間/DCIM" or "nas/Photos". */
+         
         String place(String path);
         void cancelAll();
         void cancelJob(JSONObject job, boolean running);
@@ -44,22 +44,22 @@ final class TransferPages {
         void deleteRecord(JSONObject record);
         void chooseCompare();
         void openDetail(String id);
-        /** 0.7.3: writes the record as a report file and offers to share it. */
+         
         void exportReport(String id);
     }
 
-    // ---- Shared wording ---------------------------------------------------------------------------
+     
 
     static boolean isRunning(JSONObject r) { return "進行中".equals(r.optString("state")); }
     static boolean isWaiting(JSONObject r) { return "等待中".equals(r.optString("state")); }
     static boolean isOld(JSONObject r) { return r.optString("src").isEmpty() || r.optString("kind").isEmpty(); }
 
-    /** Stored state without exit codes, which mean nothing to the reader. Waiting is "排隊中" on screen. */
+     
     static String stateText(JSONObject r) {
         String s = r.optString("state").replaceAll("（\\d+）", "");
         if (s.equals("等待中")) return "排隊中";
         if (s.equals("進行中")) return r.optBoolean("cancelling") ? "正在取消" : r.optString("operation") + "中";
-        // 0.7.1: a run with some failed files still kept everything it copied; "失敗" alone read as "nothing done".
+         
         JSONObject sum = r.optJSONObject("result");
         if (s.startsWith("失敗") && sum != null && copied(r.optString("kind"), sum) + n(sum, "deleted") > 0) return "部分完成";
         return s;
@@ -81,7 +81,7 @@ final class TransferPages {
         return Ui.muted;
     }
 
-    /** "同步：讓目的地和來源一模一樣", "複製" … Old records only know the verb. */
+     
     static String method(JSONObject r) {
         String kind = r.optString("kind");
         return kind.isEmpty() ? r.optString("operation") : MainActivity.kindLabel(kind);
@@ -89,19 +89,19 @@ final class TransferPages {
 
     static long n(JSONObject sum, String key) { return sum == null ? 0 : sum.optLong(key); }
 
-    /** Errors as rclone counts them (every failed attempt), or the files with errors if that is more. */
+     
     static long errors(JSONObject sum) { return Math.max(n(sum, "errors"), n(sum, "fileErrors")); }
 
-    /** Files that went across, whatever the method calls it. */
+     
     static long copied(String kind, JSONObject sum) {
         long a = n(sum, "added") + n(sum, "replaced") + n(sum, "moved");
         return TransferService.MIRROR.equals(kind) ? n(sum, "added") : a;
     }
 
-    /**
-     * One line for a card: "新增 12 · 更新 3 · 刪除 5 · 不用傳 1,024 · 出錯 1 次". Deletions always show for
-     * "make identical", including zero, and say why when they have not happened.
-     */
+     
+
+
+
     static String countsLine(JSONObject r, JSONObject sum) {
         if (sum == null || sum.length() == 0) return "";
         String kind = r.optString("kind");
@@ -127,14 +127,14 @@ final class TransferPages {
                 if (n(sum, "same") > 0) p.add("同名略過 " + MainActivity.count(n(sum, "same")));
                 break;
         }
-        // Files that failed when known; otherwise rclone's error count (e.g. a folder that could not be listed).
+         
         if (n(sum, "fileErrors") > 0) p.add("出錯 " + MainActivity.count(n(sum, "fileErrors")) + " 個檔案");
         else if (errors(sum) > 0) p.add("出錯 " + MainActivity.count(errors(sum)) + " 次");
         if (running && n(sum, "checks") > 0 && n(sum, "totalTransfers") == 0) p.add(0, "已比對 " + MainActivity.count(n(sum, "checks")) + " 項");
         return TextUtils.join(" · ", p);
     }
 
-    /** Deletion state of a "make identical" sync in a few words. */
+     
     static String deletionShort(JSONObject r, JSONObject sum) {
         long deleted = n(sum, "deleted"), planned = n(sum, "onlyDst");
         if (sum.optBoolean("deletesSkipped") && planned > 0) return "因為出錯沒有刪除 " + MainActivity.count(planned);
@@ -143,7 +143,7 @@ final class TransferPages {
         return "已刪除 " + MainActivity.count(deleted) + (dirs > 0 ? "、資料夾 " + MainActivity.count(dirs) : "");
     }
 
-    /** "11/9 14:03", with the year when it is not this year. */
+     
     static String clock(long ms) {
         if (ms <= 0) return "";
         Calendar now = Calendar.getInstance(), t = Calendar.getInstance();
@@ -152,7 +152,7 @@ final class TransferPages {
         return new SimpleDateFormat(f, Locale.TAIWAN).format(new Date(ms));
     }
 
-    /** rclone's ISO time ("2023-12-31T16:00:00.000000000Z") in local time, to the second. */
+     
     static String isoClock(String iso) {
         try {
             java.time.ZonedDateTime z = java.time.OffsetDateTime.parse(iso).atZoneSameInstant(java.time.ZoneId.systemDefault());
@@ -160,22 +160,22 @@ final class TransferPages {
         } catch (Exception e) { return iso; }
     }
 
-    /**
-     * The destination did not keep modification times, and the comparison now chosen would copy unchanged files
-     * again. Comparing by size or content would not, so the warning is then left out.
-     */
+     
+
+
+
     static boolean timeWarning(Context c, JSONObject r) {
         return r.has("timeNotKept") && Settings.compare(c) == Settings.COMPARE_DEFAULT;
     }
 
-    /** Time used: from the record's start and end, or rclone's own elapsed time while running. */
+     
     static long usedMs(JSONObject r, JSONObject sum) {
         long s = r.optLong("started"), e = r.optLong("ended");
         if (s > 0 && e >= s) return e - s;
         return (long) (sum == null ? 0 : sum.optDouble("elapsed", 0) * 1000);
     }
 
-    // ---- Small views --------------------------------------------------------------------------
+     
 
     private static TextView sectionLabel(Context c, String s) {
         TextView t = Ui.title(c, s, 13.5f, Ui.muted);
@@ -198,7 +198,7 @@ final class TransferPages {
         return tile;
     }
 
-    /** Small state label with its icon, e.g. ✓ 完成. */
+     
     private static LinearLayout stateChip(Context c, String state) {
         LinearLayout chip = Ui.row(c);
         int tint = stateTint(state);
@@ -210,7 +210,7 @@ final class TransferPages {
         return chip;
     }
 
-    /** "從 X" / "到 Y": the direction in words, as the sync sheet says it. */
+     
     private static View route(Context c, Host host, JSONObject r, float size, boolean wrap) {
         LinearLayout box = Ui.column(c);
         if (isOld(r)) {
@@ -218,7 +218,7 @@ final class TransferPages {
             return box;
         }
         String dst = r.optString("dst");
-        // Copy and move of one item store the full target path; the user picked the folder.
+         
         if (!r.optBoolean("directory", true) && !TransferService.MIRROR.equals(r.optString("kind")) && !TransferService.FILL.equals(r.optString("kind")))
             dst = MainActivity.parent(dst);
         box.addView(routeLine(c, "從", host.place(r.optString("src")), size, wrap));
@@ -248,7 +248,7 @@ final class TransferPages {
         return bar;
     }
 
-    /** Fraction done by bytes, else by files; -1 while unknown. */
+     
     static float fraction(JSONObject st) {
         if (st == null) return -1;
         long b = st.optLong("bytes"), tb = st.optLong("totalBytes"), t = st.optLong("transfers"), tt = st.optLong("totalTransfers");
@@ -257,7 +257,7 @@ final class TransferPages {
         return -1;
     }
 
-    /** "1.2 GB / 3.4 GB · 12.0 MB/秒" while running. */
+     
     static String bytesLine(JSONObject st) {
         if (st == null) return "正在準備…";
         long b = st.optLong("bytes"), tb = st.optLong("totalBytes");
@@ -268,7 +268,7 @@ final class TransferPages {
         return s;
     }
 
-    /** "已用 2 分 3 秒 · 還要約 5 分 10 秒". The total can still grow while rclone compares, so the time left is an estimate. */
+     
     static String timeLine(JSONObject st) {
         if (st == null) return "";
         String s = "已用 " + MainActivity.duration((long) (st.optDouble("elapsedTime") * 1000));
@@ -277,7 +277,7 @@ final class TransferPages {
         return s;
     }
 
-    /** ScrollView that remembers when a finger was last on it, so the list does not shift under a tap. */
+     
     static final class TouchScroll extends ScrollView {
         long touchedAt;
         boolean touching;
@@ -291,8 +291,8 @@ final class TransferPages {
         boolean busy() { return touching || android.os.SystemClock.uptimeMillis() - touchedAt < 700; }
     }
 
-    // ============================================================================================
-    // List page
+     
+     
 
     static final class ListPage {
         final Overlay.Page page;
@@ -303,7 +303,7 @@ final class TransferPages {
         private final TextView stopAll;
         private final TextView clear;
         private String signature = "";
-        // Running card parts, updated in place every tick
+         
         private JSONObject running;
         private ProgressBar runBar;
         private TextView runState, runBytes, runCounts, runTime;
@@ -393,7 +393,7 @@ final class TransferPages {
             }
         }
 
-        /** Top of every card: method tile, name, method, state. */
+         
         private LinearLayout head(JSONObject r, String state) {
             LinearLayout head = Ui.row(c);
             LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(Ui.dp(40), Ui.dp(40));
@@ -512,10 +512,10 @@ final class TransferPages {
         }
     }
 
-    // ============================================================================================
-    // Detail page
+     
+     
 
-    /** One list group on the detail page: key in the report, label, and the explanation under its number. */
+     
     private static final class Group {
         final String key, label, hint;
         final String[] lists;
@@ -523,7 +523,7 @@ final class TransferPages {
         Group(String key, String label, String hint, long count, String... lists) { this.key = key; this.label = label; this.hint = hint; this.count = count; this.lists = lists; }
     }
 
-    /** The groups a job of this kind has, with counts. */
+     
     static ArrayList<Group> groups(JSONObject r, JSONObject sum) {
         String kind = r.optString("kind");
         boolean dir = r.optBoolean("directory", true), run = isRunning(r);
@@ -542,7 +542,7 @@ final class TransferPages {
                     g.add(new Group("onlyDst", "要刪除", "只在目的地", n(sum, "onlyDst"), TransferReport.ONLY_DST));
                 else
                     g.add(new Group("deleted", "已刪除", "只在目的地，已刪除", n(sum, "deleted"), TransferReport.DELETED));
-                // 0.7.4: folders only in the destination, removed (rclone's own or the app's clean-up).
+                 
                 if (n(sum, "removedDirs") > 0)
                     g.add(new Group("dirs", "刪除的資料夾", "只在目的地的資料夾，已刪除", n(sum, "removedDirs"), TransferReport.DIRS));
                 break;
@@ -579,7 +579,7 @@ final class TransferPages {
         private String structure = "", listSignature = "";
         private String group;
         private long listBuiltAt;
-        // Parts that change while the job runs
+         
         private TextView stateLine, bytes, time;
         private ProgressBar progress;
         private LinearLayout tiles, statsBox, transferringBox, chips, files, warnings;
@@ -597,7 +597,7 @@ final class TransferPages {
             update();
         }
 
-        /** Rebuilds when the job changes state; while it runs, refreshes the numbers in place. */
+         
         void update() {
             JSONObject d = TransferService.details(c, id);
             if (d == null) { page.dismiss(); return; }
@@ -615,7 +615,7 @@ final class TransferPages {
             page.setTitle(r.optString("name"));
             JSONObject sum = d.optJSONObject("summary");
 
-            // Header: state, method, route, times
+             
             LinearLayout head = Ui.column(c);
             head.setPadding(Ui.dp(24), Ui.dp(4), Ui.dp(24), Ui.dp(4));
             LinearLayout top = Ui.row(c);
@@ -658,9 +658,9 @@ final class TransferPages {
                 content.addView(p);
             } else { progress = null; bytes = time = null; }
 
-            // Actions, always visible near the top
+             
             LinearLayout actions = Ui.row(c);
-            // A text button has its own 12 dp inner space; start it so its words line up with the text above.
+             
             actions.setPadding(running || waiting ? Ui.dp(12) : Ui.dp(16), Ui.dp(12), Ui.dp(16), Ui.dp(4));
             if (running || waiting) {
                 TextView cancel = Ui.button(c, running ? "取消這一項" : "取消排隊", Ui.ButtonStyle.DANGER_TEXT, v -> host.cancelJob(r, running));
@@ -692,7 +692,7 @@ final class TransferPages {
             fillWarnings(r, sum);
 
             if (sum == null && !waiting) {
-                // No counts: a record from an older version, or a job that ended before it started.
+                 
                 String why = isOld(r) ? "這是舊版 App 留下的紀錄，當時沒有記下從哪裡傳到哪裡，也沒有記下數字和檔案。更新後的傳輸都會記下。"
                         : !r.has("created") ? "這是更新前的紀錄，當時只記下方式和從哪裡到哪裡，沒有記下數字和檔案。更新後的傳輸都會記下。"
                         : "這一項還沒開始就結束了，沒有傳任何檔案。";
@@ -741,7 +741,7 @@ final class TransferPages {
 
         private void fill(JSONObject d, JSONObject r) { fill(d, r, false); }
 
-        /** {@code force}: the user just picked a group, so redraw even right after a touch. */
+         
         private void fill(JSONObject d, JSONObject r, boolean force) {
             JSONObject sum = d.optJSONObject("summary"), st = d.optJSONObject("stats");
             if (st == null) st = sum;
@@ -758,14 +758,14 @@ final class TransferPages {
             }
             if (tiles == null) return;
             pickDefaultGroup(groups(r, sum));
-            // Rebuilding the tiles under a finger would swallow the tap.
+             
             if (force || !scroll.busy()) fillTiles(r, sum);
             fillStats(r, sum, st);
             if (transferringBox != null) fillTransferring(d.optJSONArray("transferring"));
             fillFiles(d, r, sum, running && !force);
         }
 
-        /** Start where something needs attention: errors, then what changed, then the first group. */
+         
         private void pickDefaultGroup(ArrayList<Group> gs) {
             if (group != null) return;
             for (Group g : gs) if (g.key.equals("errors") && g.count > 0) group = g.key;
@@ -787,7 +787,7 @@ final class TransferPages {
             if (failedFiles > 0 && !isRunning(r))
                 warnings.addView(notice(R.drawable.ic_error, Ui.error, MainActivity.count(failedFiles) + " 個檔案沒傳成",
                         "其他檔案都照常處理，傳好的會留著。沒傳成的檔案和原因列在下方「出錯」。目的地不接受的名稱，App 不會改名，只會略過。", null, null));
-            // Only when there was something to delete; 0.7.0 also said it when nothing was waiting to be deleted.
+             
             if (sum != null && sum.optBoolean("deletesSkipped") && n(sum, "onlyDst") > 0)
             {
                 JSONObject why = sum.optJSONObject("unsafeReason");
@@ -802,8 +802,13 @@ final class TransferPages {
                 String what = (files > 0 ? MainActivity.count(files) + " 個檔案" : "") + (files > 0 && dirs > 0 ? "、" : "") + (dirs > 0 ? MainActivity.count(dirs) + " 個資料夾" : "");
                 warnings.addView(notice(R.drawable.ic_info, Ui.primary, "目的地多出的 " + what + "照樣刪除了",
                         "這次的出錯都是個別檔案寫不進去，兩邊的資料夾都有讀完整，所以 rclone 跳過刪除後，App 依完整的比對結果另外刪除了多出的檔案，再刪掉來源沒有的資料夾（包括原本就是空的）。沒傳成的檔案沒有改名。"
-                        + (keptDirs > 0 ? "\n有 " + MainActivity.count(keptDirs) + " 個來源沒有的資料夾沒刪：裡面還有東西，或來源也有同名的空資料夾。" : ""), null, null));
+                        + (keptDirs > 0 ? "\n有 " + MainActivity.count(keptDirs) + " 個檢查過的資料夾已保留：來源有同名項目、裡面仍有內容，或無法確認來源。" : ""), null, null));
             }
+            if (sum != null && sum.optBoolean("directoryCleanup") && !sum.optBoolean("deletedAnyway") && n(sum,"removedDirs") > 0)
+                warnings.addView(notice(R.drawable.ic_info, Ui.primary, "另外清除了 " + MainActivity.count(n(sum,"removedDirs")) + " 個多餘空資料夾",
+                        "這些資料夾已逐一確認來源沒有，而且目的地是空的。讀不到的來源及其對應的目的地會保留；其他檔案是否能刪除，仍依原本的錯誤判斷。同步中的錯誤仍需處理。", null, null));
+            if (sum != null && !sum.optString("directoryCleanupProblem").isEmpty())
+                warnings.addView(notice(R.drawable.ic_error, Ui.error, "空資料夾清理沒有完成", sum.optString("directoryCleanupProblem"), null, null));
             if (sum != null && n(sum, "skipped") > 0)
                 warnings.addView(notice(R.drawable.ic_info, Ui.error, MainActivity.count(n(sum, "skipped")) + " 個名稱目的地存不了，沒有複製",
                         Settings.CARD_REFUSES + "列在下方「略過」。"
@@ -977,7 +982,7 @@ final class TransferPages {
             for (Group g : gs) sig.append(',').append(g.count);
             long now = android.os.SystemClock.uptimeMillis();
             if (sig.toString().equals(listSignature)) return;
-            // While the job runs, the list grows; rebuild it at most every 2 seconds, and not under a finger.
+             
             if (running && !listSignature.isEmpty() && (now - listBuiltAt < 2000 || scroll.busy())) return;
             listSignature = sig.toString();
             listBuiltAt = now;
@@ -1056,8 +1061,8 @@ final class TransferPages {
         }
     }
 
-    // ============================================================================================
-    // Comparison method chooser, shared by the settings screen, the sync sheet and the detail page
+     
+     
 
     static final String COMPARE_EXPLAIN = "兩邊都有同名檔案時，用什麼判斷要不要重新傳。只用在「讓目的地和來源一模一樣」；複製、移動和「只補上缺少的檔案」遇到同名檔案一律略過，不覆蓋。";
     static final String[] COMPARE_DETAILS = {
@@ -1065,7 +1070,7 @@ final class TransferPages {
             "只看大小，不看修改時間。適合保留不了修改時間的目的地（同步後會出現「目的地沒有保留修改時間」的提醒）；大小相同、內容不同的檔案不會更新。",
             "不看修改時間，大小相同時再比檔案內容，能找出時間沒變、內容卻不同的檔案。要讀完整個檔案，檔案多時很慢；兩邊算不出共同的指紋時（例如 NAS），效果和「只比對大小」一樣。"};
 
-    /** Radio list of the methods with one explanation each; saves the pick and runs {@code picked}. */
+     
     static void chooseCompare(Context c, Overlay overlay, Runnable picked) {
         LinearLayout box = Ui.column(c);
         final Overlay.Dialog[] d = new Overlay.Dialog[1];
@@ -1109,7 +1114,7 @@ final class TransferPages {
             });
             box.addView(opt, new LinearLayout.LayoutParams(-1, -2));
         }
-        // The options scroll inside the dialog, so its title and buttons stay on screen on short phones.
+         
         ScrollView sv = new ScrollView(c) {
             @Override protected void onMeasure(int w, int h) {
                 int max = getResources().getDisplayMetrics().heightPixels - Ui.dp(300);

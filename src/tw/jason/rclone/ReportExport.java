@@ -15,19 +15,19 @@ import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * Writes one transfer's full record to a text file in Download/RcloneNext報告 (0.7.3), so it can be sent for
- * analysis: what ran, with which settings, every count, why deletion was or was not done, each kind of error with
- * a sample of rclone's own message, the files of each group, the connection types and the memory card's file
- * system. Never written: passwords or the contents of the connection settings; error text goes through
- * {@link TransferReport#clean}. The second half is the same data as JSON for reading by a program.
- */
+ 
+
+
+
+
+
+
 public final class ReportExport {
     private ReportExport() {}
 
     static final String FOLDER = "RcloneNext報告";
 
-    /** Builds and saves the report; returns the file. Call from a background thread (it runs rclone briefly). */
+     
     public static File export(Context c, String id) throws Exception {
         JSONObject d = TransferService.details(c, id);
         if (d == null) throw new IllegalStateException("找不到這筆紀錄");
@@ -70,7 +70,7 @@ public final class ReportExport {
         if (sum == null) t.append("（這筆紀錄沒有記下數字）\n");
         else {
             String[][] keys = {{"added", "新增"}, {"replaced", "更新（覆蓋）"}, {"moved", "移動"}, {"same", "不用傳／同名略過"}, {"onlyDst", "只在目的地"},
-                    {"deleted", "已刪除"}, {"removedDirs", "刪除的資料夾"}, {"extraDirs", "App 清理時找到的多出資料夾"}, {"keptDirs", "多出但沒刪的資料夾"},
+                    {"deleted", "已刪除"}, {"removedDirs", "刪除的資料夾"}, {"extraDirs", "App 清理時檢查的資料夾"}, {"keptDirs", "檢查後保留的資料夾"},
                     {"timeOnly", "只更新時間"}, {"skipped", "略過的名稱"}, {"fileErrors", "出錯的檔案"}, {"errors", "rclone 錯誤次數"},
                     {"listed", "兩邊合計讀取"}, {"checks", "已比對"}, {"transfers", "已傳檔案"}, {"bytes", "已傳位元組"}};
             for (String[] k : keys) t.append(k[1]).append("：").append(MainActivity.count(sum.optLong(k[0]))).append('\n');
@@ -83,13 +83,16 @@ public final class ReportExport {
         else {
             if (sum.optBoolean("deletedAnyway")) t.append("rclone 因為出錯跳過刪除；所有錯誤都是單一檔案寫入失敗，App 依完整比對另外刪除了 ").append(MainActivity.count(sum.optLong("deleted")))
                     .append(" 個檔案，並刪掉來源沒有的資料夾 ").append(MainActivity.count(sum.optLong("removedDirs"))).append(" 個（找到 ").append(MainActivity.count(sum.optLong("extraDirs")))
-                    .append(" 個，沒刪 ").append(MainActivity.count(sum.optLong("keptDirs"))).append(" 個：裡面還有東西，或來源也有同名的空資料夾）。\n");
+                    .append(" 個，沒刪 ").append(MainActivity.count(sum.optLong("keptDirs"))).append(" 個：來源有同名項目、仍有內容，或無法確認來源）。\n");
             else if (sum.optBoolean("deletesSkipped")) t.append("沒有刪除只在目的地的 ").append(MainActivity.count(sum.optLong("onlyDst"))).append(" 個檔案。\n");
             else t.append("照常刪除：").append(MainActivity.count(sum.optLong("deleted"))).append(" 個。\n");
+            if (sum.optBoolean("directoryCleanup") && !sum.optBoolean("deletedAnyway"))
+                t.append("另外確認並清理空資料夾：已刪除 ").append(MainActivity.count(sum.optLong("removedDirs"))).append(" 個；讀不到的來源分支、來源有同名項目及非空資料夾仍保留。這不表示可以依不完整清單刪除檔案。\n");
+            if (!sum.optString("directoryCleanupProblem").isEmpty()) t.append(sum.optString("directoryCleanupProblem")).append('\n');
             JSONObject why = sum.optJSONObject("unsafeReason");
             if (why != null) t.append("擋住刪除的第一個錯誤：").append(why.optString("objectType")).append(" | ").append(why.optString("object")).append(" | ").append(why.optString("msg")).append('\n');
-            t.append("判斷依據：只有單一檔案的寫入錯誤（Failed to copy/move、Failed to set modification time、partial file rename failed，以及資料夾的 Failed to update directory timestamp）會放行刪除；其他錯誤一律不刪。")
-             .append("放行時先刪只在目的地的檔案，再刪來源沒有的資料夾（最深的先刪，只刪空的；來源有同名空資料夾的不刪）。\n");
+            t.append("判斷依據：只有單一檔案的寫入錯誤（Failed to copy/move、Failed to set modification time、partial file rename failed，以及資料夾的 Failed to update directory timestamp）會放行刪除；其他錯誤不放行檔案刪除。")
+             .append("空資料夾另行從最深層檢查：只有來源已確認不存在、而且目的地確實為空才刪除；讀不到的來源分支保留。\n");
         }
         if (sum != null && sum.optBoolean("cardNames")) t.append("記憶卡名稱：結尾是句點或空格的檔案和資料夾不複製、不改名（記憶卡會去掉結尾）；只列出來源最上層找到的。\n");
         if (r != null && r.has("timeNotKept")) t.append("目的地沒有保留修改時間：").append(r.optJSONObject("timeNotKept").toString()).append('\n');
@@ -106,7 +109,7 @@ public final class ReportExport {
             t.append(MainActivity.count(k.optLong("count"))).append(" 次｜").append(k.optString("kind")).append("\n　例：").append(k.optString("sample")).append('\n');
         }
 
-        // 0.7.4: every folder with failed files, not only the first 500 files.
+         
         JSONArray folders = d.optJSONArray("errorFolders");
         if (folders != null && folders.length() > 0) {
             t.append("\n== 出錯的資料夾（全部，每個資料夾一行）==\n");
@@ -153,7 +156,7 @@ public final class ReportExport {
         try { return c.getPackageManager().getPackageInfo(c.getPackageName(), 0).versionName; } catch (Exception e) { return "?"; }
     }
 
-    /** The /proc/self/mounts lines for a memory card or USB path (file system type and options), or null. */
+     
     static String mountLine(String path) {
         java.util.regex.Matcher m = java.util.regex.Pattern.compile("^/storage/([0-9A-Fa-f]{4}-[0-9A-Fa-f]{4})(/|$)").matcher(path == null ? "" : path);
         if (!m.find()) return null;

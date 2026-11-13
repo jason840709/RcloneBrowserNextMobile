@@ -10,13 +10,13 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-/** A process-owning queue; Activity recreation does not cancel transfers. */
+ 
 public final class TransferService extends Service {
     private static final Object LOCK=new Object();
     private static final ArrayDeque<Job> QUEUE=new ArrayDeque<>();
     private static final ArrayList<JSONObject> HISTORY=new ArrayList<>();
     private static volatile String status="沒有進行中的傳輸";
-    /** rclone's latest statistics for the running job (null until the first report), shown in the transfer sheet. */
+     
     private static volatile JSONObject liveStats;
     private static Job active;
     private static java.lang.Process process;
@@ -31,25 +31,25 @@ public final class TransferService extends Service {
     private Job ownedJob;
     private PowerManager.WakeLock wakeLock;
     private long lastNotice;
-    /** Record kinds. "fill" is the folder copy that the sync sheet calls "only fill in missing files". */
+     
     public static final String COPY="copy", MOVE="move", MIRROR="mirror", FILL="fill";
-    /** Finished records kept; waiting and running ones are never trimmed. */
+     
     private static final int HISTORY_LIMIT=50;
     private static final class Job {
         final String id=UUID.randomUUID().toString(),src,dst,kind;
         final boolean directory,move,sync;
         final long created=System.currentTimeMillis();
-        /** Wall-clock start and end; 0 until then. */
+         
         volatile long started, ended;
         volatile boolean cancelled;
-        /** What rclone did, file by file (0.7.0). */
+         
         final TransferReport report=new TransferReport();
-        /** Settings this job runs with, fixed when it starts; -1 until then. */
+         
         int compare=-1, transfers, checkers;
-        /** Set when the destination did not keep a copied file's modification time (see timeCheck). */
+         
         JSONObject timeNotKept;
         Job(String s,String d,boolean dir,boolean m,boolean sy,String k) {src=s;dst=d;directory=dir;move=m;sync=sy;kind=k;}
-        /** Last path part; at the top of a connection ("nas:") the connection name, which used to come out empty. */
+         
         String name() {
             String s=src.replaceAll("/+$",""); int i=Math.max(s.lastIndexOf('/'),s.lastIndexOf(':'));
             String n=s.substring(i+1);
@@ -65,7 +65,7 @@ public final class TransferService extends Service {
     public static String enqueue(Context context,String src,String dst,boolean directory,boolean move,boolean sync) {
         return enqueue(context,src,dst,directory,move,sync,sync?MIRROR:move?MOVE:COPY);
     }
-    /** kind only labels the record (see FILL); the rclone command still follows directory, move and sync. */
+     
     public static String enqueue(Context context,String src,String dst,boolean directory,boolean move,boolean sync,String kind) {
         validateTransfer(src,dst,directory);
         if(sync && (!directory || move)) throw new IllegalArgumentException("同步需要選擇資料夾");
@@ -83,7 +83,7 @@ public final class TransferService extends Service {
         }
         return job.id;
     }
-    /** Cancels one job: a waiting one leaves the queue untouched otherwise; a running one stops its rclone process. */
+     
     public static boolean cancel(String id) {
         synchronized(LOCK) {
             for(Iterator<Job> it=QUEUE.iterator();it.hasNext();) {
@@ -101,7 +101,7 @@ public final class TransferService extends Service {
             return false;
         }
     }
-    /** Running and waiting jobs, running first: id, name, operation, kind, state, cancelling. */
+     
     public static JSONArray queue() {
         JSONArray rows=new JSONArray();
         synchronized(LOCK) {
@@ -116,11 +116,11 @@ public final class TransferService extends Service {
         return new JSONObject().put("id",job.id).put("name",job.name()).put("operation",job.verb()).put("kind",job.kind)
             .put("src",job.src).put("dst",job.dst).put("directory",job.directory).put("created",job.created).put("started",job.started);
     }
-    /**
-     * Everything the detail page shows for one job: the record fields, "summary" (counts), "lists" (the
-     * first {@link TransferReport#KEEP} paths of each group) and, while it runs, "stats" and "transferring".
-     * Finished jobs read the details file; records from before 0.7.0 have none and return the record alone.
-     */
+     
+
+
+
+
     public static JSONObject details(Context c,String id) {
         synchronized(LOCK) {
             loadHistory(c);
@@ -148,11 +148,11 @@ public final class TransferService extends Service {
             return null;
         }
     }
-    /** Counts of the running job, for its card in the list; null if it is not running. */
+     
     public static JSONObject liveSummary(String id) {
         synchronized(LOCK) { return active!=null && active.id.equals(id) ? active.report.summary() : null; }
     }
-    /** Deletes finished records (done, failed, cancelled, interrupted). Waiting and running ones stay. Returns the count removed. */
+     
     public static int clearFinished(Context context) {
         synchronized(LOCK) {
             loadHistory(context);
@@ -165,7 +165,7 @@ public final class TransferService extends Service {
             return before-HISTORY.size();
         }
     }
-    /** Deletes one finished record; waiting and running records cannot be removed this way. */
+     
     public static boolean removeRecord(Context context,String id) {
         synchronized(LOCK) {
             loadHistory(context);
@@ -189,7 +189,7 @@ public final class TransferService extends Service {
             status="已取消";
         }
     }
-    /** Latest statistics of the running job: bytes, totalBytes, transfers, totalTransfers, checks, listed, deletes, errors, elapsedTime, eta. */
+     
     public static JSONObject liveStats() { return liveStats; }
     public static boolean busy() { synchronized(LOCK) { return active!=null || !QUEUE.isEmpty(); } }
     public static String status() { synchronized(LOCK) { return status+(QUEUE.isEmpty()?"":" · 等待 "+QUEUE.size()+" 項"); } }
@@ -236,7 +236,7 @@ public final class TransferService extends Service {
             }
         } finally {
             if(wakeLock.isHeld()) wakeLock.release();
-            // Serialize final stop with enqueue/start to avoid stopping a newly queued job.
+             
             new Handler(Looper.getMainLooper()).post(() -> {
                 synchronized(LOCK) {
                     if(instance==this && !workerRunning && QUEUE.isEmpty() && active==null) {
@@ -250,7 +250,7 @@ public final class TransferService extends Service {
         java.lang.Process owned=null;
         long transferred=-1;
         try {
-            // 0.7.4: a single file whose name a memory card cannot keep is not copied (the card would shorten the name).
+             
             List<String> cardFilters=Settings.cardNameFilters(job.dst);
             if(!job.directory && !cardFilters.isEmpty() && Settings.cardRefuses(nameOf(job.dst))) {
                 job.report.skipped(nameOf(job.src),Settings.CARD_REFUSES);
@@ -269,13 +269,13 @@ public final class TransferService extends Service {
             if(!job.sync) args.add("--ignore-existing");
             else {
                 args.add("--delete-after");
-                // 0.7.0: how "make identical" decides that a file present on both sides needs copying again.
+                 
                 args.addAll(compareArgs(job));
             }
-            // Values come from the user's settings; the defaults equal the fixed values used up to 0.3.0
-            // (4 transfers, 8 checkers, no bandwidth limit, 15 s connect and 60 s idle timeouts).
-            // 0.7.0: INFO level ("-v") reports each file copied, replaced, moved or deleted, and "--combined -"
-            // prints one line per file with the comparison result; TransferReport reads both.
+             
+             
+             
+             
             Collections.addAll(args,"--transfers",String.valueOf(job.transfers),"--checkers",String.valueOf(job.checkers),"--stats","1s","--stats-one-line","--use-json-log","--stats-log-level","NOTICE","-v","--combined","-","--retries","1","--low-level-retries","3","--contimeout",Settings.connectTimeout(this),"--timeout",Settings.idleTimeout(this));
             int bandwidth=Settings.bandwidthMB(this);
             if(bandwidth>0) Collections.addAll(args,"--bwlimit",bandwidth+"M");
@@ -287,8 +287,8 @@ public final class TransferService extends Service {
             }
             updateNotice();
             long lastSaved=SystemClock.elapsedRealtime();
-            // 0.7.2: for "make identical", every destination-only path goes to a list file, and the folders that
-            // exist in the source are noted, so the deletions rclone skips after single-file errors can still be done.
+             
+             
             File onlyDstList=job.sync ? new File(getCacheDir(),"only-dst-"+job.id.replaceAll("[^A-Za-z0-9-]","")+".txt") : null;
             HashSet<String> sourceDirs=new HashSet<>();
             try(BufferedReader reader=new BufferedReader(new InputStreamReader(owned.getInputStream(),StandardCharsets.UTF_8));
@@ -301,7 +301,7 @@ public final class TransferService extends Service {
                         if(k=='-') { listOut.write(line,2,line.length()-2); listOut.write('\n'); }
                         else if(k=='=' || k=='+' || k=='*' || k=='!') for(String d=parentOf(line.substring(2));!d.isEmpty() && sourceDirs.add(d);d=parentOf(d)) {}
                     }
-                    // Engine error text is only shown cleaned (see TransferReport); the notification never has it.
+                     
                     JSONObject before=job.report.stats();
                     job.report.read(line);
                     JSONObject stats=job.report.stats();
@@ -310,18 +310,18 @@ public final class TransferService extends Service {
                         long bytes=stats.optLong("bytes"), total=stats.optLong("totalBytes");
                         double speed=stats.optDouble("speed",0);
                         liveStats=stats;
-                        // Before anything needs copying (a large sync first lists and compares), say how far the comparison is.
+                         
                         if(total>0 || bytes>0) status=job.verb()+"中 · "+format(bytes)+(total>0?" / "+format(total):"")+" · "+format((long)speed)+"/秒";
                         else status=job.verb()+"中 · 已比對 "+String.format(Locale.US,"%,d",stats.optLong("checks"))+" 項";
                     }
                     long now=SystemClock.elapsedRealtime();
-                    // Keep the counts on disk every 10 s, so a job the system stops still shows what it did.
+                     
                     if(now-lastSaved>10000) { lastSaved=now; synchronized(LOCK) { putResult(job); save(this); } }
                     updateNotice();
                 }
             }
             int exit=owned.waitFor();
-            if(exit!=0 && !job.cancelled && job.sync && job.directory && job.report.canCleanAnyway()) cleanUpAnyway(job,onlyDstList,sourceDirs);
+            if(exit!=0 && !job.cancelled && job.sync && job.directory) cleanUpAnyway(job,onlyDstList,sourceDirs);
             if(onlyDstList!=null) onlyDstList.delete();
             if(job.directory && !cardFilters.isEmpty() && !job.cancelled) listCardRefused(job);
             if(exit==0 && !job.cancelled) job.timeNotKept=timeCheck(job);
@@ -350,23 +350,12 @@ public final class TransferService extends Service {
         return p.substring(i+1);
     }
 
-    /**
-     * 0.7.2, folders added in 0.7.4. rclone deletes nothing when any error happened, because a folder it could not
-     * read would look empty and its files would be deleted by mistake. When every error was about a single file
-     * (for example a name the memory card refuses), both sides were listed completely, so the clean-up rclone
-     * skipped is done here:
-     * 1. Destination-only files from that complete comparison are deleted with "rclone delete --files-from-raw".
-     * 2. Folders only in the destination are removed, deepest first, if empty. rclone itself removes these after a
-     *    run without errors, empty ones included; up to 0.7.3 only folders emptied by step 1 were removed, so
-     *    folders that were already empty stayed.
-     *    A destination folder is "only in the destination" when no source file is in it and a listing of its
-     *    parent in the source does not show it either (the source can have empty folders).
-     * Nothing is renamed.
-     */
+     
     private void cleanUpAnyway(Job job,File list,Set<String> sourceDirs) {
         java.lang.Process p=null;
+        boolean filesAllowed=job.report.canCleanAnyway();
         try {
-            if(list!=null && list.isFile() && list.length()>0) {
+            if(filesAllowed && list!=null && list.isFile() && list.length()>0) {
                 status="正在刪除目的地多出的檔案 · "+job.name();
                 updateNotice();
                 ArrayList<String> args=new ArrayList<>();
@@ -376,46 +365,21 @@ public final class TransferService extends Service {
                     String line;
                     while((line=r.readLine())!=null) { if(job.cancelled) p.destroyForcibly(); else job.report.read(line); }
                 }
-                p.waitFor();
+                filesAllowed=p.waitFor()==0;
             }
             if(job.cancelled) return;
-            status="正在清理目的地多出的資料夾 · "+job.name();
+            status="正在確認並清理目的地多出的空資料夾 · "+job.name();
             updateNotice();
-            boolean local=FileOps.isLocal(job.dst);
-            TreeSet<String> dstDirs=local ? localDirs(new File(job.dst)) : remoteDirs(job.dst);
-            ArrayList<String> removed=new ArrayList<>();
-            if(dstDirs==null) { job.report.cleanedAnyway(removed,0,0); return; }
-            TreeSet<String> extra=new TreeSet<>();
-            for(String d:dstDirs) if(!sourceDirs.contains(d)) extra.add(d);
-            // The top-most of them, by parent: one listing of each parent in the source.
-            TreeMap<String,ArrayList<String>> byParent=new TreeMap<>();
-            for(String d:extra) if(!extra.contains(parentOf(d))) { String pa=parentOf(d); if(!byParent.containsKey(pa)) byParent.put(pa,new ArrayList<>()); byParent.get(pa).add(d); }
-            HashSet<String> inSource=new HashSet<>();
-            int calls=0;
-            for(Map.Entry<String,ArrayList<String>> e:byParent.entrySet()) {
-                if(job.cancelled) return;
-                // Unknown (listing failed, or too many parents to ask): treated as present, so nothing there is removed.
-                Set<String> names=calls++<200 ? sourceSubdirs(job.src,e.getKey()) : null;
-                for(String d:e.getValue()) if(names==null || names.contains(d.substring(d.lastIndexOf('/')+1))) inSource.add(d);
-            }
-            TreeSet<String> deepestFirst=new TreeSet<>((a,b)->{ int da=depth(a),db=depth(b); return da!=db ? db-da : a.compareTo(b); });
-            deepestFirst.addAll(extra);
-            long kept=0;
-            int rmdirs=0;
-            for(String d:deepestFirst) {
-                if(job.cancelled) break;
-                boolean protectedDir=false;
-                for(String a=d;!a.isEmpty();a=parentOf(a)) if(inSource.contains(a)) { protectedDir=true; break; }
-                boolean gone=!protectedDir && (local ? new File(job.dst,d).delete() : rmdirs++<300 && Rclone.run(this,60,"rmdir","--",join(job.dst,d)).code==0);
-                if(gone) removed.add(d); else kept++;
-            }
-            job.report.cleanedAnyway(removed,extra.size(),kept);
+            SyncDirectoryCleanup.Result cleaned=SyncDirectoryCleanup.run(this,job.src,job.dst,sourceDirs,()->job.cancelled || destroyed);
+            if(filesAllowed) job.report.cleanedAnyway(cleaned.removed,cleaned.checked,cleaned.kept);
+            else job.report.directoriesCleaned(cleaned.removed,cleaned.checked,cleaned.kept);
+            if(!cleaned.problem.isEmpty()) job.report.directoryCleanupProblem(cleaned.problem);
         } catch(Exception ignored) {
+            job.report.directoryCleanupProblem("清理沒有完成，請檢查連線與儲存權限後重跑同步。");
         } finally { if(p!=null && p.isAlive()) p.destroyForcibly(); }
     }
-    private static int depth(String path) { int n=0; for(int i=0;i<path.length();i++) if(path.charAt(i)=='/') n++; return n; }
 
-    /** Every folder under a local folder, as paths relative to it; symbolic links are not followed. */
+     
     static TreeSet<String> localDirs(File root) {
         final TreeSet<String> out=new TreeSet<>();
         final java.nio.file.Path base=root.toPath();
@@ -430,29 +394,12 @@ public final class TransferService extends Service {
         } catch(IOException e) { return null; }
         return out;
     }
-    /** Every folder under a remote folder, from rclone; null if the listing was not complete. */
-    private TreeSet<String> remoteDirs(String dst) {
-        Rclone.Result r=Rclone.run(this,900,"lsf","-R","--dirs-only","--dir-slash=false","--contimeout",Settings.connectTimeout(this),"--timeout",Settings.idleTimeout(this),"--",dst);
-        if(r.code!=0) return null;
-        TreeSet<String> out=new TreeSet<>();
-        for(String line:r.out.split("\n")) if(!line.isEmpty()) out.add(line);
-        return out;
-    }
-    /** Names of the folders directly in {@code parent} of the source; null if it could not be listed. */
-    private Set<String> sourceSubdirs(String src,String parent) {
-        Rclone.Result r=Rclone.run(this,120,"lsf","--max-depth","1","--dirs-only","--dir-slash=false","--contimeout",Settings.connectTimeout(this),"--timeout",Settings.idleTimeout(this),"--",parent.isEmpty() ? src : join(src,parent));
-        if(r.code!=0) return null;
-        HashSet<String> out=new HashSet<>();
-        for(String line:r.out.split("\n")) if(!line.isEmpty()) out.add(line);
-        return out;
-    }
+     
 
-    /**
-     * 0.7.4. The names this transfer left out because a memory card cannot keep them (Settings.cardNameFilters):
-     * rclone does not report filtered names, so the top level of the source is listed once (one folder listing,
-     * cheap even on a NAS) and the names there that end in a period or space are listed. Deeper ones are left out
-     * the same way; the detail page says they are not listed one by one.
-     */
+
+
+
+
     private void listCardRefused(Job job) {
         Rclone.Result r=Rclone.run(this,120,"lsf","--max-depth","1","--contimeout",Settings.connectTimeout(this),"--timeout",Settings.idleTimeout(this),"--",job.src);
         if(r.code!=0) return;
@@ -462,26 +409,26 @@ public final class TransferService extends Service {
         }
     }
 
-    /** Comparison flags and time tolerance for "make identical" with the method fixed when the job started. */
+     
     private List<String> compareArgs(Job job) {
         List<String> a=Settings.compareFlags(job.compare);
         String window=Settings.modifyWindow(job.src,job.dst);
         if(window!=null) { a.add("--modify-window"); a.add(window); }
         return a;
     }
-    /**
-     * After a folder sync that copied files: would the next "make identical" sync copy the first of them
-     * again? A one-file dry run with the same comparison answers that. Yes means the destination did not
-     * keep the modification time (or keeps it less precisely than the source), and every unchanged file
-     * would be copied again each time; the detail page then suggests comparing by size.
-     * Returns {path, src, dst} with both times, or null when the time was kept or the check could not run.
-     */
+     
+
+
+
+
+
+
     private JSONObject timeCheck(Job job) {
         if(!job.directory || !(job.sync || FILL.equals(job.kind))) return null;
         String path=job.report.firstCopied();
         return path==null ? null : timeNotKept(this,job.src,job.dst,path,job.compare);
     }
-    /** Public for the tests: the check itself, for one file under two folders. */
+     
     public static JSONObject timeNotKept(Context c,String src,String dst,String path,int compare) {
         String s=join(src,path), d=join(dst,path);
         ArrayList<String> args=new ArrayList<>();
@@ -504,7 +451,7 @@ public final class TransferService extends Service {
         return base.endsWith("/") || base.endsWith(":") ? base+rel : base+"/"+rel;
     }
     private static File detailsFile(Context c,String id) { return new File(new File(c.getFilesDir(),"transfer-details"),id.replaceAll("[^A-Za-z0-9-]","")+".json"); }
-    /** File lists go to their own file, so the history stays small; the record keeps the counts. */
+     
     private static void saveDetails(Context c,Job job) {
         File f=detailsFile(c,job.id);
         f.getParentFile().mkdirs();
@@ -514,7 +461,7 @@ public final class TransferService extends Service {
             out=file.startWrite(); out.write(d.toString().getBytes(StandardCharsets.UTF_8)); file.finishWrite(out);
         } catch(IOException e) { if(out!=null) file.failWrite(out); }
     }
-    /** Counts, settings and times of a job into its history record (caller holds LOCK). */
+     
     private static void putResult(Job job) {
         for(JSONObject row:HISTORY) if(row.optString("id").equals(job.id)) {
             try {
@@ -551,7 +498,7 @@ public final class TransferService extends Service {
         synchronized(LOCK) {
             destroyed=true;
             if(instance==this) {
-                // A queued start may already be scheduled. Never discard its jobs during idle shutdown.
+                 
                 if(ownedJob!=null && active==ownedJob) {
                     active.cancelled=true; record(this,active,"已中斷");
                     if(process!=null) process.destroyForcibly();
@@ -580,8 +527,8 @@ public final class TransferService extends Service {
             JSONObject row=null;
             for(JSONObject item:HISTORY) if(item.optString("id").equals(job.id)) {row=item;break;}
             if(row==null) {
-                // Source and destination are kept so a record can be run again or saved as a reusable job.
-                // They are paths only; engine error text, which may hold tokens, is still never stored.
+                 
+                 
                 row=new JSONObject();row.put("id",job.id);row.put("name",job.name());row.put("operation",job.verb());
                 row.put("kind",job.kind);row.put("src",job.src);row.put("dst",job.dst);row.put("directory",job.directory);
                 row.put("created",job.created);
