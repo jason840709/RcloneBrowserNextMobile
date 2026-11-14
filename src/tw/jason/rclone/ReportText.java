@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 
- 
+/** Streams complete UTF-8 lines within a byte budget, reserving room for a truthful footer. */
 public final class ReportText {
     public static final long MAX_BYTES = 100_000_000L;
     private static final int FOOTER_BYTES = 1024, LINE_CHARS = 16384;
@@ -42,7 +42,7 @@ public final class ReportText {
         if (shortened) {
             if (pending.length() > 0 && Character.isHighSurrogate(pending.charAt(pending.length() - 1)))
                 pending.setLength(pending.length() - 1);
-            pending.append("…（這一行過長，後段省略）");
+            pending.append("…（過長省略）");
             shortenedLines++;
         }
         String line = pending.toString() + "\n";
@@ -51,7 +51,7 @@ public final class ReportText {
         shortened = false;
     }
 
-     
+    /** JSON is written as a whole block so the byte limit never leaves half a JSON document. */
     public void block(String text) throws IOException {
         if (finished) throw new IllegalStateException("Report already finished");
         if (pending.length() > 0) flushLine();
@@ -70,8 +70,8 @@ public final class ReportText {
         if (finished) return;
         if (pending.length() > 0) flushLine();
         String footer = "\n== 報告容量 ==\n單份上限：" + limit + " 位元組。\n"
-                + "因容量限制省略 " + omittedLines + " 行、" + omittedBlocks + " 段資料；過長而縮短 " + shortenedLines + " 行。\n"
-                + "未逐項列出的檔案仍包含在統計數字內；清單沒有某個路徑，不代表該路徑沒有錯誤。\n";
+                + "因容量限制省略 " + omittedLines + " 行、" + omittedBlocks + " 段；過長截短 " + shortenedLines + " 行。\n"
+                + "未列出的檔案仍計入上方統計；清單未顯示不代表該路徑無錯誤。\n";
         int size = footer.getBytes(StandardCharsets.UTF_8).length;
         if (bytes + size > limit) throw new IOException("Report footer exceeds budget");
         out.write(footer);

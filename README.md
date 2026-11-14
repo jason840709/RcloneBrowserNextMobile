@@ -1,70 +1,68 @@
 <p align="center"><img src="res/mipmap-xxxhdpi/ic_launcher_fg.png" width="112" alt="Rclone Browser Next Mobile 應用程式圖示"></p>
 <h1 align="center">Rclone Browser Next Mobile</h1>
-<p align="center">給 Android 的 rclone 檔案管理器。手機與雲端檔案，切換位置就能搬檔。</p>
-<p align="center"><a href="https://github.com/jason840709/RcloneBrowserNextMobile/releases/tag/v0.7.6">下載 0.7.6</a> · <a href="docs/USER_GUIDE.zh-TW.md">使用手冊</a> · <a href="docs/BUILD.md">建置說明</a> · <a href="https://github.com/jason840709/RcloneBrowserNextMobile/issues">回報問題</a></p>
+<p align="center">Android 版 rclone 檔案管理器，在本機與遠端之間輕鬆搬移、同步檔案。</p>
+<p align="center"><a href="https://github.com/jason840709/RcloneBrowserNextMobile/releases/tag/v0.8.0">下載 0.8.0</a> · <a href="docs/USER_GUIDE.zh-TW.md">使用手冊</a> · <a href="docs/BUILD.md">建置說明</a> · <a href="https://github.com/jason840709/RcloneBrowserNextMobile/issues">回報問題</a></p>
 
 <p align="center"><img src="docs/images/split.png" width="360" alt="上下雙窗格：上方遠端資料夾，下方手機資料夾，中間提供同步設定"></p>
 
 *畫面以示意資料呈現。*
 
-## 這是什麼？
+## 簡介
 
-Rclone Browser Next Mobile 是 [Rclone Browser Next](https://github.com/jason840709/RcloneBrowserNext) 系列的 Android 檔案管理器，沿用桌面版的應用程式圖示，提供紫、藍、綠三種強調色。檔案傳輸由 [rclone](https://rclone.org/) 執行，手機介面提供單頁、分頁與上下雙窗格，方便瀏覽資料夾、複製、移動和同步。
+Rclone Browser Next Mobile 是 [Rclone Browser Next](https://github.com/jason840709/RcloneBrowserNext) 的 Android 版本，沿用桌面版圖示，提供紫、藍、綠三種配色。底層傳輸由 [rclone](https://rclone.org/) 執行，支援單頁、分頁與上下雙窗格，方便瀏覽、複製、移動與同步檔案。
 
-**目前版本為 0.7.6，提供 Android ARM64 安裝包。** 最低系統設定為 Android 8。可直接覆蓋更新 0.7.5，保留既有設定與連線。
+**目前版本為 0.8.0（Android ARM64，需 Android 8 以上）。** 可直接覆蓋安裝 0.7.6，保留既有設定與連線。
 
-## 0.7.6 更新
+## 0.8.0 更新重點
 
-- 傳輸紀錄與詳細頁提供獨立的「匯出分析報告」按鈕，窄螢幕與放大字體也能看到。
-- 單份分析報告最多 100 MB。正常檔案只保留統計，錯誤與只在目標的項目各可保存最多 5,000 筆路徑；省略內容會標明筆數。
-- 同步出錯後的清理報告，新增根目錄下的資料夾數量，以及逐資料夾的保留原因；比對時發現的多餘檔案和最後的刪除結果會分開說明。
+- 改寫介面、操作說明與使用手冊，補清楚同步、略過與刪除的條件。
+- 本機與記憶卡重新命名改用系統操作，直接更改名稱；支援直接改名的遠端連線會使用伺服器功能。
+- 同一儲存空間內，移動到尚不存在的目的資料夾時，可直接移動整個資料夾，傳輸紀錄也會顯示整個資料夾的移動結果。
 
 <p align="center"><img src="docs/images/transfers-0.7.0.png" width="300" alt="傳輸紀錄：同步方式、來源、目的地與進度"><img src="docs/images/transfer-details-0.7.0.png" width="300" alt="傳輸詳細頁：新增、更新、不用傳、刪除與出錯的數字"></p>
 
-## 手機上怎麼用？
+## 主要功能
 
-### 一次看一個資料夾，或同時看兩個位置
+### 單頁、分頁與雙窗格
 
-單頁模式把畫面留給檔案清單；分頁可以輪流查看兩個位置；上下雙窗格適合在來源和目的地之間搬檔。長按選取後，複製與移動按鈕才會出現。傳輸進度也只在工作進行時顯示。
+單頁模式可專注瀏覽單一資料夾；分頁模式可切換兩個位置；雙窗格適合在來源與目的地之間對傳。長按選取檔案後才會顯示複製、移動等操作列，平常不佔畫面空間。
 
-### 本機與遠端共用操作方式
+### 本機與遠端連線
 
-NAS 是區域網路中的檔案儲存設備。App 提供 NAS 常用的檔案分享連線 SMB、加密檔案傳輸連線 SFTP，以及透過網址讀寫檔案的 WebDAV 連線表單。其他雲端服務可匯入既有、整份未加密的 rclone 設定檔。目前沒有內建雲端帳號的瀏覽器登入流程。
+內建 SMB、SFTP 與 WebDAV 連線表單，方便連上 NAS 或伺服器；Google 雲端硬碟、OneDrive 等雲端服務可匯入未加密的 `rclone.conf` 設定檔（暫無內建瀏覽器 OAuth 登入）。
 
-一般複製與移動會略過目的地已有的同名檔案。移動時，被略過的來源仍保留。背景傳輸可從系統通知或 App 的「傳輸紀錄」查看進度，進行中與排隊中的工作都能單獨取消。
+一般複製與移動遇到同名檔案會直接略過（移動時保留來源檔案）。背景傳輸可從系統通知或「傳輸紀錄」查看進度，進行中與排隊中的工作皆可單獨取消。
 
-### 同步可以先比對，也能直接開始
+### 單向同步（可先比對或直接開始）
 
-雙窗格提供兩種單向操作：
+雙窗格中間的「同步設定」提供兩種單向同步模式（皆只修改目的地，不動來源）：
 
-| 方式 | 目的地會發生什麼事 |
+| 方式 | 說明 |
 | --- | --- |
-| 只補上缺少的檔案 | 複製目的地沒有的檔案，不覆蓋或刪除既有檔案 |
-| 讓目的地和來源一模一樣 | 依選定的比對方式更新不同的檔案，刪除目的地多出的檔案 |
+| 只補上缺少的檔案 | 僅複製目的地缺少的檔案，不覆蓋也不刪除原有檔案 |
+| 讓目的地和來源一模一樣 | 依比對方式覆蓋不同檔案，並刪除目的地多出的檔案 |
 
-最後點過的窗格預設為來源，另一個窗格為目的地。同步設定面板可對調方向。兩種方式都不修改來源。「先比對」會列出變更，確認後才執行；「直接開始」會立即執行，其中「讓目的地和來源一模一樣」會再確認一次。比對可以停止，沒有總時間上限。取消會保留已完成的變更，沒有一鍵還原。
+最後點選的窗格預設為來源，可按「對調」反轉方向。「先比對」會先預覽變更清單（不限時間，可中途停止），確認後才執行；「直接開始」省略比對，其中「讓目的地和來源一模一樣」仍會再確認。取消同步會保留已完成的變更，無法一鍵復原。
 
 ## 快速開始
 
-APK 是 Android 的安裝包。
-
-1. 從[發布頁](https://github.com/jason840709/RcloneBrowserNextMobile/releases/tag/v0.7.6)下載 APK，在 ARM64 手機上安裝。
-2. 第一次開啟時，按「允許檔案存取」完成系統授權。開始傳輸時可允許顯示通知。
-3. 點窗格左上角的手機或雲朵圖示，選擇位置、新增連線，或匯入 rclone 設定。
-4. 長按選取檔案，按「複製」或「移動」，前往目的資料夾後按「貼上」。雙窗格可直接傳送到另一側。
+1. 從[發布頁](https://github.com/jason840709/RcloneBrowserNextMobile/releases/tag/v0.8.0)下載 APK 並安裝於 ARM64 手機。
+2. 首次開啟時點「允許檔案存取」授權讀寫本機檔案；開始傳輸時可授權顯示進度通知。
+3. 點左上角位置圖示，切換儲存空間、新增遠端連線或匯入 rclone 設定檔。
+4. 長按選取檔案即可複製、移動；在雙窗格可直接傳往另一側或執行同步。
 
 ## 使用限制
 
-程序被系統終止後不會自動續傳。重新貼上會略過已存在的檔案，因此中斷後應先確認目的地檔案是否完整。
+App 被系統強制終止後不會自動續傳。由於重新貼上會略過同名檔案，中斷後請先確認目的地有沒有留下不完整檔案。
 
-## 文件與回報
+## 文件與問題回報
 
 - [使用手冊](docs/USER_GUIDE.zh-TW.md)：瀏覽、複製、移動、同步與連線設定。
-- [建置說明](docs/BUILD.md)：取得引擎、編譯、簽章與輸出位置。
-- [0.7.6 發布說明](docs/RELEASE_0.7.6.md)：版本內容、需求與已知限制。
+- [建置說明](docs/BUILD.md)：下載引擎、編譯與簽章方式。
+- [0.8.0 發布說明](docs/RELEASE_0.8.0.md)：更新內容與已知限制。
 
-回報問題時，請提供 App 版本、Android 版本、連線類型與重現步驟。請勿張貼密碼、權杖或完整的個人連線設定。
+回報問題請附上 App 版本、Android 版本、連線類型與重現步驟，並留意勿貼出密碼、Token 或完整設定檔。
 
 ## 授權與致謝
 
-程式採 [MIT License](LICENSE)。rclone 引擎的授權與來源見[第三方元件說明](assets/THIRD-PARTY.txt)。應用程式圖示與桌面版共用。
+本專案採 [MIT License](LICENSE) 授權。內附 rclone 引擎之來源與授權請見[第三方元件說明](assets/THIRD-PARTY.txt)。

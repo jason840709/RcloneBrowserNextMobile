@@ -85,7 +85,7 @@ public final class Rclone {
             while ((count=input.read(buffer)) != -1) {
                 if (out.size()+count <= limit) out.write(buffer, 0, count); else overflow = true;
             }
-            if (overflow) throw new IOException("資料夾項目過多，請開啟較小的子資料夾");
+            if (overflow) throw new IOException("資料夾項目太多，請改開較小的子資料夾");
             return out.toString(StandardCharsets.UTF_8.name());
         }
     }
@@ -93,7 +93,7 @@ public final class Rclone {
         try {
             String a=normalized(src), b=normalized(dst);
             if (a.equals(b)) return "來源與目的地相同";
-            if (b.startsWith(a.endsWith(":") || a.endsWith("/") ? a : a+"/")) return "目的地不能位於來源資料夾內";
+            if (b.startsWith(a.endsWith(":") || a.endsWith("/") ? a : a+"/")) return "目的地不能在來源資料夾裡面";
             if (a.startsWith(b.endsWith(":") || b.endsWith("/") ? b : b+"/")) return "來源與目的地不能互相包含";
             return null;
         } catch (Exception e) { return "檔案位置無效"; }

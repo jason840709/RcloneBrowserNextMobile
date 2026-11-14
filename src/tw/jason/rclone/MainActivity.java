@@ -42,7 +42,11 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
- 
+/**
+ * Screen coordinator. Holds the two browsing windows, the clipboard and the view mode, and turns
+ * user actions into calls on {@link FileOps} and {@link TransferService}. Views are built once and
+ * updated in place, so state changes animate instead of rebuilding the screen.
+ */
 public class MainActivity extends Activity implements PaneView.Host {
     static final int SINGLE = 0, TABS = 1, SPLIT = 2;
     private static final int SORT_NAME = 0, SORT_DATE = 1, SORT_SIZE = 2;
@@ -70,7 +74,7 @@ public class MainActivity extends Activity implements PaneView.Host {
     private TransferUi.Pill pill;
     private TextView snackbar;
     Overlay overlay;
-     
+    /** Transfer pages (0.7.0); null when closed. */
     private TransferPages.ListPage transferList;
     private TransferPages.DetailPage transferDetail;
 
@@ -84,10 +88,10 @@ public class MainActivity extends Activity implements PaneView.Host {
     private boolean neededAccess;
     private Runnable hidePill, hideSnack;
 
-     
-     
+    // ============================================================================================
+    // Lifecycle
 
-     
+    /** Applies the light/dark choice from Settings before any resource is read. */
     @Override protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
         applyNightOverride(this, base);
@@ -97,14 +101,14 @@ public class MainActivity extends Activity implements PaneView.Host {
         int night = Settings.night(base);
         if (night == Settings.NIGHT_SYSTEM) return;
         Configuration c = new Configuration();
-        c.fontScale = 0;  
+        c.fontScale = 0; // keep the user's font size; only the night flag is overridden
         int current = base.getResources().getConfiguration().uiMode;
         c.uiMode = (current & ~Configuration.UI_MODE_NIGHT_MASK)
                 | (night == Settings.NIGHT_DARK ? Configuration.UI_MODE_NIGHT_YES : Configuration.UI_MODE_NIGHT_NO);
         activity.applyOverrideConfiguration(c);
     }
 
-     
+    /** Settings that need a fresh screen when they change. */
     private String lookKey() {
         return Settings.accent(this) + "|" + Settings.night(this) + "|" + Settings.dense(this);
     }
@@ -205,8 +209,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         if (mode == SPLIT) layoutMode(false);
     }
 
-     
-     
+    // ============================================================================================
+    // Window and layout
 
     private void setupWindow() {
         setupWindow(this);
@@ -217,7 +221,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Ui.surface));
         if (Build.VERSION.SDK_INT >= 30) {
             w.setDecorFitsSystemWindows(false);
-            w.getDecorView();  
+            w.getDecorView(); // the insets controller exists only after the decor view is created
             android.view.WindowInsetsController ic = w.getInsetsController();
             if (ic != null) {
                 int light = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
@@ -230,7 +234,7 @@ public class MainActivity extends Activity implements PaneView.Host {
                 if (Build.VERSION.SDK_INT >= 27) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
             }
             w.getDecorView().setSystemUiVisibility(flags);
-             
+            // Android 8.0 cannot draw dark navigation buttons, so keep a scrim behind them.
             if (Build.VERSION.SDK_INT < 27 && !Ui.dark) w.setNavigationBarColor(0x66000000);
         }
     }
@@ -268,7 +272,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         snackbar.setBackground(Ui.round(Ui.inverseSurface, 12));
         snackbar.setPadding(Ui.dp(16), Ui.dp(14), Ui.dp(16), Ui.dp(14));
         snackbar.setElevation(Ui.dp(6));
-         
+        // Above sheets and dialogs (the overlay sits at 32dp), so messages from inside a sheet are seen.
         snackbar.setTranslationZ(Ui.dp(40));
         snackbar.setVisibility(View.GONE);
         snackbar.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
@@ -322,7 +326,7 @@ public class MainActivity extends Activity implements PaneView.Host {
 
     boolean isLandscape() { return getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE; }
 
-     
+    /** Places the two windows for the current mode. Pane views are reused, never rebuilt. */
     void layoutMode(boolean animate) {
         for (PaneView p : panes) { ViewGroup parent = (ViewGroup) p.getParent(); if (parent != null) parent.removeView(p); }
         if (divider.getParent() != null) ((ViewGroup) divider.getParent()).removeView(divider);
@@ -363,7 +367,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         layoutMode(true);
     }
 
-     
+    // ---- Tabs ---------------------------------------------------------------------------------
 
     private LinearLayout buildTabStrip() {
         LinearLayout strip = Ui.row(this);
@@ -397,7 +401,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         PaneView from = panes[active], to = panes[k];
         active = k;
         if (mode == TABS) {
-             
+            // Cancel first: a pending end action from a quick earlier switch must not hide the new tab.
             from.animate().cancel();
             to.animate().cancel();
             from.setAlpha(1f);
@@ -426,12 +430,12 @@ public class MainActivity extends Activity implements PaneView.Host {
         }
     }
 
-     
+    // ---- Split divider ------------------------------------------------------------------------
 
     private LinearLayout buildDivider() {
         LinearLayout d = new LinearLayout(this);
         d.setGravity(Gravity.CENTER);
-         
+        // Same purple family as the active header, strong enough to read as the boundary between windows.
         d.setBackgroundColor(Ui.splitBar);
         LinearLayout swap = Ui.row(this);
         swap.setGravity(Gravity.CENTER);
@@ -452,7 +456,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         LinearLayout sync = Ui.row(this);
         sync.setGravity(Gravity.CENTER);
         sync.setPadding(Ui.dp(12), 0, Ui.dp(14), 0);
-         
+        // A filled chip so it reads as a button that opens something, not a status label.
         sync.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(Ui.alpha(Ui.onSplitBar, .25f)),
                 Ui.round(Ui.alpha(Ui.onSplitBar, .18f), 18), Ui.round(0xffffffff, 18)));
         syncButtonIcon = Ui.icon(this, R.drawable.ic_sync, Ui.onSplitBar);
@@ -463,7 +467,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         sync.setOnClickListener(v -> openSync());
         sync.setTag("sync");
         d.addView(sync);
-         
+        // Drag anywhere on the divider (outside its buttons) to resize the two windows.
         d.setOnTouchListener(new View.OnTouchListener() {
             float startRatio, start;
             @Override public boolean onTouch(View v, MotionEvent e) {
@@ -510,7 +514,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         sp.rightMargin = landscape ? 0 : Ui.dp(8);
         sync.setLayoutParams(sp);
         sync.setPadding(Ui.dp(landscape ? 14 : 12), 0, Ui.dp(14), 0);
-         
+        // Push the sync button to the far end and keep the handle centred.
         divider.removeView(handle);
         divider.removeView(sync);
         View spacerA = new View(this), spacerB = new View(this);
@@ -554,8 +558,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         if (mode == SPLIT) updateSyncButton();
     }
 
-     
-     
+    // ============================================================================================
+    // Bottom bars, pill and snackbar
 
     void updateBars() {
         PaneView p = panes[active];
@@ -587,7 +591,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         return show;
     }
 
-     
+    /** Lists keep their last rows reachable above whatever floats at the bottom. */
     private void updateBottomSpace() {
         int bar = selectionBarShown ? selectionBar.getHeight() : clipBarShown ? clipBar.getHeight() : 0;
         if ((selectionBarShown || clipBarShown) && bar == 0) bar = Ui.dp(68) + insetNav;
@@ -658,7 +662,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         String what = clipboard.size() == 1 ? "「" + clipboard.get(0).name + "」" : clipboard.size() + " 項";
         String verb = moving ? "移動" : "複製";
         texts.addView(Ui.oneLine(Ui.title(this, clipboard.size() == 1 ? verb + what : verb + " " + what, 15.5f, Ui.ink), TextUtils.TruncateAt.MIDDLE));
-        TextView rule = Ui.text(this, moving ? "同名檔案略過、原檔保留；其餘傳完才刪原檔" : "同名檔案會略過", 12.5f, Ui.muted);
+        TextView rule = Ui.text(this, moving ? "同名略過並保留原檔；其餘傳完才刪原檔" : "同名檔案會略過", 12.5f, Ui.muted);
         rule.setMaxLines(2);
         rule.setEllipsize(TextUtils.TruncateAt.END);
         texts.addView(rule);
@@ -691,8 +695,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         handler.postDelayed(hideSnack, 3200);
     }
 
-     
-     
+    // ============================================================================================
+    // PaneView.Host
 
     @Override public void activate(PaneView p) {
         if (panes[active] == p) return;
@@ -704,7 +708,7 @@ public class MainActivity extends Activity implements PaneView.Host {
     @Override public void openEntry(PaneView p, FileOps.Entry e) {
         if (e.dir) { load(p, e.path, 1); return; }
         if (!FileOps.isLocal(e.path)) {
-            overlay.new Dialog(e.name, "下載到本機的 Download 資料夾後，再從那裡開啟。那裡已有同名檔案時不會重新下載，開到的會是舊的那份。")
+            overlay.new Dialog(e.name, "下載到本機 Download 資料夾後，請從那裡開啟。已有同名檔案時會略過下載，請先確認是否為舊檔。")
                     .action("取消", Ui.ButtonStyle.TEXT, null)
                     .action("下載", Ui.ButtonStyle.FILLED, () -> whenNetworkOk(true, () -> {
                         try {
@@ -722,7 +726,7 @@ public class MainActivity extends Activity implements PaneView.Host {
             Intent in = new Intent(Intent.ACTION_VIEW).setDataAndType(u, getContentResolver().getType(u)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(Intent.createChooser(in, "開啟「" + e.name + "」"));
         } catch (Exception ex) {
-            message(null, "手機裡沒有能開啟這個檔案的 App。");
+            message(null, "找不到可開啟此檔案的 App。");
         }
     }
 
@@ -734,7 +738,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         load(p, path, isAncestor(path, p.path) ? -1 : 1);
     }
 
-     
+    /** Stops waiting for a slow folder; the pane keeps showing the folder it had. */
     @Override public void cancelLoad(PaneView p) {
         p.generation++;
         p.setLoading(false);
@@ -784,7 +788,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         return v != null && v.root.equals(root) ? v.label : root;
     }
 
-     
+    /** Volume root for a local path ("/" when it is outside every volume); the remote name for remotes. */
     @Override public String localRoot(String path) {
         if (!FileOps.isLocal(path)) return path.substring(0, path.indexOf(':') + 1);
         Storage.Volume v = Storage.volumeFor(this, path);
@@ -813,7 +817,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         };
     }
 
-     
+    /** Name order that puts "2" before "10", case-insensitive. */
     static int natural(String a, String b) {
         int i = 0, j = 0;
         while (i < a.length() && j < b.length()) {
@@ -837,8 +841,8 @@ public class MainActivity extends Activity implements PaneView.Host {
 
     @Override public boolean showHidden() { return hidden; }
 
-     
-     
+    // ============================================================================================
+    // Loading
 
     void load(PaneView p, String destination, int direction) {
         final int generation = ++p.generation;
@@ -888,8 +892,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         });
     }
 
-     
-     
+    // ============================================================================================
+    // File actions
 
     void toClipboard(PaneView p, boolean move) {
         clipboard.clear();
@@ -902,7 +906,7 @@ public class MainActivity extends Activity implements PaneView.Host {
     void paste() {
         if (clipboard.isEmpty()) return;
         PaneView target = panes[active];
-        if (target.loading || !target.error.isEmpty()) { message(null, "等目前資料夾讀取完成再貼上。"); return; }
+        if (target.loading || !target.error.isEmpty()) { message(null, "請等資料夾讀取完再貼上。"); return; }
         boolean remote = !FileOps.isLocal(target.path) || !FileOps.isLocal(clipboard.get(0).path);
         whenNetworkOk(remote, () -> {
             try {
@@ -919,7 +923,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         PaneView from = panes[active], to = panes[1 - active];
         ArrayList<FileOps.Entry> items = from.selectedEntries();
         if (items.isEmpty()) return;
-        if (to.loading || !to.error.isEmpty()) { message(null, "等另一個窗格讀取完成再傳送。"); return; }
+        if (to.loading || !to.error.isEmpty()) { message(null, "請等另一邊讀取完再傳送。"); return; }
         whenNetworkOk(!FileOps.isLocal(from.path) || !FileOps.isLocal(to.path), () -> {
             try {
                 askNotifications();
@@ -945,19 +949,18 @@ public class MainActivity extends Activity implements PaneView.Host {
         Overlay.Dialog d = overlay.new Dialog("重新命名", null).view(edit);
         d.action("取消", Ui.ButtonStyle.TEXT, null);
         d.button("確定", Ui.ButtonStyle.FILLED, () -> {
-            String name = edit.getText().toString().trim();
+            String name = edit.getText().toString();
             if (name.equals(e.name)) { d.dismiss(); return; }
             String bad = invalidName(name);
             if (bad != null) { edit.setError(bad); return; }
             d.dismiss();
-            String target = FileOps.join(p.path, name);
-            command(() -> FileOps.stat(this, target), r -> {
-                if (r.code == 0) { message(null, "這裡已經有「" + name + "」。"); return; }
-                try {
-                    TransferService.enqueue(this, e.path, target, e.dir, true, false);
-                    p.clearSelection();
-                    transferStarted();
-                } catch (Exception ex) { error(ex); }
+            p.setWorking("正在重新命名…");
+            command(() -> FileOps.rename(this, e, name), r -> {
+                p.setLoading(false);
+                if (r.code != 0) { message("無法重新命名", r.err); return; }
+                p.clearSelection();
+                load(p, p.path, 0);
+                snack("已重新命名");
             });
         });
         d.show();
@@ -988,7 +991,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         boolean anyDir = false;
         for (FileOps.Entry e : items) anyDir |= e.dir;
         String title = items.size() == 1 ? "刪除「" + items.get(0).name + "」？" : "刪除 " + items.size() + " 項？";
-        String body = anyDir ? "資料夾裡的檔案也會一起刪除，刪除後無法復原。" : "刪除後無法復原。";
+        String body = anyDir ? "裡面的檔案也會一併刪除，且無法復原。" : "刪除後無法復原。";
         overlay.new Dialog(title, body)
                 .action("取消", Ui.ButtonStyle.TEXT, null)
                 .action("刪除", Ui.ButtonStyle.DANGER, () -> {
@@ -1045,24 +1048,24 @@ public class MainActivity extends Activity implements PaneView.Host {
         return path.equals(v.root) ? v.label : v.label + "/" + path.substring(v.root.length() + 1);
     }
 
-     
-     
+    // ============================================================================================
+    // Sync (split view)
 
     static final int SYNC_FILL = 0, SYNC_MIRROR = 1;
 
-     
+    /** Opens the sync sheet. Choosing and previewing never touch files; only the final button queues work. */
     void openSync() {
         PaneView from = panes[active], to = panes[1 - active];
-        if (from.loading || to.loading || !from.error.isEmpty() || !to.error.isEmpty()) { message(null, "等兩邊的資料夾都讀取完成再同步。"); return; }
-        if (!from.selected.isEmpty() || !to.selected.isEmpty()) { message("同步會處理整個資料夾", "請先取消選取。只想同步一部分時，先打開那個子資料夾再同步。"); return; }
+        if (from.loading || to.loading || !from.error.isEmpty() || !to.error.isEmpty()) { message(null, "請等兩邊都讀取完再同步。"); return; }
+        if (!from.selected.isEmpty() || !to.selected.isEmpty()) { message("同步會處理整個資料夾", "請先取消選取。若只想同步某個子資料夾，請先點進去再同步。"); return; }
         try { TransferService.validateTransfer(from.path, to.path, true); } catch (Exception e) { error(e); return; }
         new SyncSheet(from.path, to.path).show();
     }
 
-     
+    /** Name of the last path part, or the location name at a root, e.g. "Download", "本機", "nas". */
     String placeName(String path) { return panes[0].label(path); }
 
-     
+    /** The comparison now running in a sync sheet, stopped when the screen closes. */
     private SyncCompare runningCompare;
 
     private void keepScreenOn(boolean on) {
@@ -1070,10 +1073,10 @@ public class MainActivity extends Activity implements PaneView.Host {
         else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
-     
+    /** "12,345" */
     static String count(long n) { return String.format(java.util.Locale.US, "%,d", n); }
 
-     
+    /** "45 秒", "3 分 12 秒", "1 小時 5 分" */
     static String duration(long ms) {
         long s = Math.max(0, ms / 1000);
         if (s < 60) return s + " 秒";
@@ -1084,9 +1087,9 @@ public class MainActivity extends Activity implements PaneView.Host {
     private final class SyncSheet {
         String src, dst;
         int mode = getPreferences(0).getInt("syncMode", SYNC_FILL);
-         
+        /** Opened from a saved job or a record: the method and direction are fixed and not stored as the new default. */
         boolean fixed;
-         
+        /** Opened from a saved job: it is already saved, so the sheet does not offer to save it. */
         boolean fromSavedJob;
         final LinearLayout content = Ui.column(MainActivity.this);
         final TextView title;
@@ -1094,7 +1097,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         Overlay.Sheet sheet;
         int run;
         SyncCompare compare;
-         
+        /** Runs after the work is queued; a saved job uses it to note when it last ran. */
         Runnable onStart;
 
         SyncSheet(String from, String to) {
@@ -1111,8 +1114,8 @@ public class MainActivity extends Activity implements PaneView.Host {
 
         void show() {
             settings();
-             
-             
+            // 0.7.0: the buttons stay below the scrolling part, so "直接開始" and "先比對" are always on screen,
+            // however tall the settings get (the comparison row made them taller than some phones).
             LinearLayout frame = Ui.column(MainActivity.this);
             frame.addView(scroll(content), new LinearLayout.LayoutParams(-1, 0, 1));
             frame.addView(buttons, new LinearLayout.LayoutParams(-1, -2));
@@ -1121,7 +1124,7 @@ public class MainActivity extends Activity implements PaneView.Host {
             sheet.show();
         }
 
-         
+        /** From a saved job or a record: the method is already chosen; the user still picks compare first or start now. */
         void showFixed(int method, boolean savedJob) {
             fixed = true;
             fromSavedJob = savedJob;
@@ -1163,15 +1166,15 @@ public class MainActivity extends Activity implements PaneView.Host {
             route.addView(routeEnd(locationIcon(dst), placeName(dst), "目的地"), new LinearLayout.LayoutParams(0, -2, 1));
         }
 
-         
+        /** Step 1: direction and method, then start now or compare first. */
         void settings() {
             run++;
             stopCompare();
             title.setText("同步設定");
             drawRoute(!fixed);
             body.removeAllViews();
-             
-            TextView rule = Ui.title(MainActivity.this, "「" + placeName(src) + "」不會被改動，只有「" + placeName(dst) + "」會變。", 14, Ui.onPrimaryContainer);
+            // Rule for every sync method: the source is never changed; only the destination is.
+            TextView rule = Ui.title(MainActivity.this, "「" + placeName(src) + "」不會變動，只有「" + placeName(dst) + "」會變。", 14, Ui.onPrimaryContainer);
             rule.setBackground(Ui.round(Ui.primaryContainer, 12));
             rule.setPadding(Ui.dp(14), Ui.dp(10), Ui.dp(14), Ui.dp(10));
             LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
@@ -1180,13 +1183,13 @@ public class MainActivity extends Activity implements PaneView.Host {
             body.addView(rule, rl);
             body.addView(overlay.sectionLabel("方式"));
             if (!fixed || mode == SYNC_FILL) body.addView(option(SYNC_FILL, "只補上缺少的檔案",
-                    "只複製「" + placeName(dst) + "」沒有的檔案。已有同名檔案就略過，原有的檔案不刪除、不覆蓋。"));
+                    "只複製「" + placeName(dst) + "」缺少的檔案。同名檔案會略過，不覆蓋也不刪除原有檔案。"));
             if (!fixed || mode == SYNC_MIRROR) body.addView(option(SYNC_MIRROR, "讓目的地和來源一模一樣",
-                    "缺的補上；兩邊不同的，換成來源的版本；「" + placeName(dst) + "」多出的檔案會刪除。"));
+                    "補上缺少的、覆蓋不同的檔案，「" + placeName(dst) + "」多出的檔案會刪除。"));
             if (mode == SYNC_MIRROR) body.addView(compareRow());
             TextView note = Ui.text(MainActivity.this, mode == SYNC_FILL
-                    ? "「先比對」列出要複製的檔案，確認後才開始，比對不改任何檔案。檔案很多時比對要好幾分鐘，也可以直接開始。"
-                    : "「先比對」列出要新增、更新和刪除的檔案，確認後才開始，比對不改任何檔案。檔案很多時比對要好幾分鐘。", 13, Ui.muted);
+                    ? "「先比對」會先預覽要複製的檔案（不改動檔案），確認後才執行；檔案多時需數分鐘，也可直接開始。"
+                    : "「先比對」會先預覽要新增、更新與刪除的檔案（不改動檔案），確認後才執行；檔案多時需數分鐘。", 13, Ui.muted);
             note.setLineSpacing(0, 1.2f);
             note.setPadding(Ui.dp(24), Ui.dp(4), Ui.dp(24), 0);
             body.addView(note);
@@ -1197,7 +1200,7 @@ public class MainActivity extends Activity implements PaneView.Host {
                     if (already) { sheet.dismiss(); showSavedJobs(); }
                     else saveJob(src, dst, true, kind, this::settings);
                 });
-                save.setContentDescription(already ? "這個同步已經存過，查看常用工作" : "把這個同步存成常用工作");
+                save.setContentDescription(already ? "這組同步已存過，查看常用工作" : "把這組同步存成常用工作");
                 LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-2, -2);
                 sp.leftMargin = Ui.dp(12);
                 sp.topMargin = Ui.dp(6);
@@ -1209,17 +1212,17 @@ public class MainActivity extends Activity implements PaneView.Host {
             direct.setContentDescription(mode == SYNC_MIRROR ? "不比對，直接開始同步，會先確認" : "不比對，直接開始補上缺少的檔案");
             buttons.addView(direct, marginLeft(8));
             TextView first = Ui.button(MainActivity.this, "先比對", Ui.ButtonStyle.FILLED, v -> preview());
-            first.setContentDescription("先比對兩邊，列出要變更的檔案，不改任何檔案");
+            first.setContentDescription("先比對兩邊並列出變更清單，不改動檔案");
             buttons.addView(first, marginLeft(8));
         }
 
-         
+        /** 0.7.0: how "different" is decided, with a way to change it; the same setting as in the settings screen. */
         private View compareRow() {
             LinearLayout row = Ui.row(MainActivity.this);
             row.setPadding(Ui.dp(16), Ui.dp(6), Ui.dp(4), Ui.dp(6));
             row.setBackground(Ui.round(Ui.surfaceContainer, 16));
             LinearLayout texts = Ui.column(MainActivity.this);
-            texts.addView(Ui.text(MainActivity.this, "怎麼判斷兩邊不同（比對方式）", 13, Ui.muted));
+            texts.addView(Ui.text(MainActivity.this, "比對方式（判斷檔案是否不同）", 13, Ui.muted));
             String name = Settings.compareName(Settings.compare(MainActivity.this));
             texts.addView(Ui.title(MainActivity.this, name, 14.5f, Ui.ink));
             row.addView(texts, Ui.weight(1));
@@ -1278,12 +1281,12 @@ public class MainActivity extends Activity implements PaneView.Host {
             return card;
         }
 
-         
+        /** "直接開始": filling in never deletes or overwrites, so it starts at once; mirroring asks first. */
         private void startWithoutCompare() {
             final String from = src, to = dst;
             final int chosen = mode;
             if (chosen == SYNC_FILL) { enqueue(from, to, chosen); return; }
-            overlay.new Dialog("不比對，直接同步？", "「" + placeName(to) + "」會改成和「" + placeName(from) + "」一模一樣：缺的補上，不同的用「" + placeName(from) + "」的版本覆蓋，「" + placeName(to) + "」多出的檔案會刪除。直接同步就不會先列出要刪哪些檔案。")
+            overlay.new Dialog("不比對，直接同步？", "「" + placeName(to) + "」會改成和「" + placeName(from) + "」一樣：補上缺少的、用「" + placeName(from) + "」覆蓋不同的，「" + placeName(to) + "」多出的檔案會刪除（不先預覽刪除清單）。")
                     .action("先比對", Ui.ButtonStyle.TEXT, this::preview)
                     .action("直接同步", Ui.ButtonStyle.DANGER, () -> enqueue(from, to, chosen)).show();
         }
@@ -1301,7 +1304,7 @@ public class MainActivity extends Activity implements PaneView.Host {
             });
         }
 
-         
+        /** Step 2: dry run with live counts; then list the changes and offer the one button that queues the work. */
         void preview() {
             final int ticket = ++run;
             final String from = src, to = dst;
@@ -1338,14 +1341,14 @@ public class MainActivity extends Activity implements PaneView.Host {
             cl.leftMargin = cl.rightMargin = Ui.dp(16);
             cl.topMargin = Ui.dp(8);
             body.addView(card, cl);
-            TextView note = Ui.text(MainActivity.this, "比對可能要好幾分鐘。請讓 App 留在畫面上；切到別的 App，比對可能會暫停或中斷。", 13, Ui.muted);
+            TextView note = Ui.text(MainActivity.this, "比對可能需數分鐘，請讓 App 留在畫面上；切換到其他 App 可能暫停或中斷比對。", 13, Ui.muted);
             note.setLineSpacing(0, 1.2f);
             note.setPadding(Ui.dp(24), Ui.dp(10), Ui.dp(24), 0);
             body.addView(note);
 
             buttons.removeAllViews();
             TextView stop = Ui.button(MainActivity.this, "停止比對", Ui.ButtonStyle.TEXT, v -> { ring.stop(); settings(); });
-            stop.setContentDescription("停止比對，回到同步設定，沒有改任何檔案");
+            stop.setContentDescription("停止比對並返回同步設定（未改動檔案）");
             buttons.addView(stop);
 
             final SyncCompare job = new SyncCompare();
@@ -1374,7 +1377,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         }
 
         private String foundLine(SyncCompare.Snapshot s, int chosen) {
-            if (s.changes() == 0) return "還沒找到要變更的檔案";
+            if (s.changes() == 0) return "尚未發現需變更的檔案";
             StringBuilder b = new StringBuilder("目前找到：");
             if (s.updates > 0) b.append(chosen == SYNC_FILL ? "要複製 " : "要新增或更新 ").append(count(s.updates)).append(" 項");
             if (s.deletes > 0) b.append(s.updates > 0 ? "、" : "").append("要刪除 ").append(count(s.deletes)).append(" 項");
@@ -1390,17 +1393,17 @@ public class MainActivity extends Activity implements PaneView.Host {
                 TextView t = Ui.text(MainActivity.this, r.problem, 15, Ui.error);
                 t.setPadding(Ui.dp(24), Ui.dp(12), Ui.dp(24), Ui.dp(4));
                 body.addView(t);
-                TextView took = Ui.text(MainActivity.this, "用了 " + duration(r.totals.elapsedMs) + "，沒有改任何檔案。", 13, Ui.muted);
+                TextView took = Ui.text(MainActivity.this, "耗時 " + duration(r.totals.elapsedMs) + "，未改動任何檔案。", 13, Ui.muted);
                 took.setPadding(Ui.dp(24), Ui.dp(4), Ui.dp(24), Ui.dp(8));
                 body.addView(took);
                 buttons.addView(Ui.button(MainActivity.this, "再比對一次", Ui.ButtonStyle.TONAL, v -> preview()), marginLeft(8));
                 return;
             }
             SyncCompare.Snapshot s = r.totals;
-            TextView summary = Ui.text(MainActivity.this, "兩邊合計讀了 " + count(s.listed) + " 項，用了 " + duration(s.elapsedMs) + "。", 13, Ui.muted);
+            TextView summary = Ui.text(MainActivity.this, "兩邊合計讀了 " + count(s.listed) + " 項，耗時 " + duration(s.elapsedMs) + "。", 13, Ui.muted);
             summary.setPadding(Ui.dp(24), Ui.dp(8), Ui.dp(24), 0);
             if (s.changes() == 0) {
-                TextView t = Ui.title(MainActivity.this, chosen == SYNC_FILL ? "目的地已經有來源的所有檔案，不需要複製。" : "兩邊的內容已經一樣，不需要同步。", 15.5f, Ui.success);
+                TextView t = Ui.title(MainActivity.this, chosen == SYNC_FILL ? "目的地已有來源的所有檔案，不需複製。" : "兩邊內容已經一致，不需同步。", 15.5f, Ui.success);
                 t.setPadding(Ui.dp(24), Ui.dp(16), Ui.dp(24), Ui.dp(4));
                 body.addView(t);
                 body.addView(summary);
@@ -1428,20 +1431,20 @@ public class MainActivity extends Activity implements PaneView.Host {
             for (FileOps.SyncChange ch : r.shown) listBox.addView(changeRow(ch, chosen == SYNC_FILL));
             ScrollView sv = new ScrollView(MainActivity.this);
             sv.addView(listBox);
-             
+            // Short enough that the start button stays on screen on a phone; the list scrolls inside.
             LinearLayout.LayoutParams svp = new LinearLayout.LayoutParams(-1, Math.min(Ui.dp(r.hidden() > 0 ? 220 : 264), Ui.dp(44) * r.shown.size() + Ui.dp(8)));
             svp.topMargin = Ui.dp(6);
             body.addView(sv, svp);
             if (r.hidden() > 0) {
-                 
+                // Deletions are listed first, up to their own limit; say so when some of them are not listed.
                 String deletes = s.deletes > r.shownDeletes ? "；要刪除的 " + count(s.deletes) + " 項只列出前 " + count(r.shownDeletes) + " 項" : "";
-                TextView more = Ui.text(MainActivity.this, "共 " + count(s.changes()) + " 項變更，畫面只列出 " + count(r.shown.size()) + " 項" + deletes + "。沒列出的也會照樣處理。", 13, Ui.muted);
+                TextView more = Ui.text(MainActivity.this, "共 " + count(s.changes()) + " 項變更，僅預覽前 " + count(r.shown.size()) + " 項" + deletes + "，未列出的也會一併處理。", 13, Ui.muted);
                 more.setLineSpacing(0, 1.2f);
                 more.setPadding(Ui.dp(24), Ui.dp(8), Ui.dp(24), 0);
                 body.addView(more);
             }
             if (s.timeOnly > 0) body.addView(timeOnlyNote(s.timeOnly));
-            TextView note = Ui.text(MainActivity.this, "比對之後檔案若有變動，實際結果會跟著不同。", 12.5f, Ui.muted);
+            TextView note = Ui.text(MainActivity.this, "比對後若檔案有變動，實際結果可能會不同。", 12.5f, Ui.muted);
             note.setPadding(Ui.dp(24), Ui.dp(10), Ui.dp(24), 0);
             body.addView(note);
             String go;
@@ -1454,7 +1457,7 @@ public class MainActivity extends Activity implements PaneView.Host {
     }
 
     private TextView timeOnlyNote(int count) {
-        TextView t = Ui.text(this, "另有 " + count + " 項只調整修改時間，不改內容。", 13.5f, Ui.muted);
+        TextView t = Ui.text(this, "另有 " + count + " 項僅更新修改時間，內容不變。", 13.5f, Ui.muted);
         t.setPadding(Ui.dp(24), Ui.dp(8), Ui.dp(24), 0);
         return t;
     }
@@ -1515,8 +1518,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         return lp;
     }
 
-     
-     
+    // ============================================================================================
+    // Locations and connections
 
     @Override public void showLocations(PaneView p, View anchor) {
         Storage.invalidate();
@@ -1528,7 +1531,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         List<Storage.Volume> vols = Storage.volumes(this);
         for (Storage.Volume v : vols) c.addView(volumeRow(p, v, holder));
         if (vols.size() == 1) {
-            TextView none = Ui.text(this, "沒有偵測到記憶卡或 USB 隨身碟。插入後會出現在這裡。", 13.5f, Ui.muted);
+            TextView none = Ui.text(this, "未偵測到記憶卡或 USB 隨身碟，插入後會顯示於此。", 13.5f, Ui.muted);
             none.setPadding(Ui.dp(24), Ui.dp(2), Ui.dp(24), Ui.dp(8));
             c.addView(none);
         }
@@ -1561,7 +1564,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         holder[0] = overlay.new Sheet(scroll(c)).show();
     }
 
-     
+    /** Storage row with free space and a usage bar. */
     private View volumeRow(PaneView p, Storage.Volume v, Overlay.Sheet[] holder) {
         String space = v.total > 0 ? "可用 " + FileOps.size(v.free) + "，共 " + FileOps.size(v.total) : null;
         boolean here = localRoot(p.path).equals(v.root);
@@ -1586,8 +1589,8 @@ public class MainActivity extends Activity implements PaneView.Host {
     }
 
     private View locationRow(PaneView p, int icon, String title, String subtitle, String target, Overlay.Sheet[] holder, View trailing) {
-         
-         
+        // Connections mark the one the window is inside; bookmarks only mark an exact match, so a
+        // folder and its bookmarked parent are never highlighted at the same time.
         boolean current = target.endsWith(":") ? p.path.equals(target) || isAncestor(target, p.path) : p.path.equals(target);
         LinearLayout row = overlay.sheetRow(icon, current ? Ui.primary : Ui.primaryContainer, current ? Ui.onPrimary : Ui.primary, title, subtitle, trailing,
                 v -> { holder[0].dismiss(); if (!p.path.equals(target)) load(p, target, isAncestor(target, p.path) ? -1 : 1); });
@@ -1599,9 +1602,9 @@ public class MainActivity extends Activity implements PaneView.Host {
     }
 
     void removeRemote(String remote, Overlay.Sheet sheet) {
-        if (TransferService.busy()) { message(null, "等傳輸完成再移除連線。"); return; }
+        if (TransferService.busy()) { message(null, "傳輸中無法移除連線。"); return; }
         String name = rootLabel(remote);
-        overlay.new Dialog("移除「" + name + "」？", "只會移除這支手機上的連線設定，NAS 或雲端上的檔案不受影響。要改帳號或密碼，可以移除後重新新增。")
+        overlay.new Dialog("移除「" + name + "」？", "只會刪除手機上的連線設定，不影響遠端檔案。若要修改帳號密碼，請移除後重新新增。")
                 .action("取消", Ui.ButtonStyle.TEXT, null)
                 .action("移除連線", Ui.ButtonStyle.DANGER, () -> {
                     if (sheet != null) sheet.dismiss();
@@ -1624,14 +1627,14 @@ public class MainActivity extends Activity implements PaneView.Host {
     }
 
     void addRemote() {
-        if (TransferService.busy()) { message(null, "等傳輸完成再新增連線。"); return; }
+        if (TransferService.busy()) { message(null, "傳輸中無法新增連線。"); return; }
         LinearLayout c = Ui.column(this);
         final Overlay.Sheet[] holder = new Overlay.Sheet[1];
         c.addView(overlay.sheetTitle("新增連線"));
         c.addView(overlay.sheetRow(R.drawable.ic_server, Ui.primaryContainer, Ui.primary, "SMB", "多數 NAS 與 Windows 共用資料夾", null, v -> { holder[0].dismiss(); remoteForm(0); }));
         c.addView(overlay.sheetRow(R.drawable.ic_server, Ui.primaryContainer, Ui.primary, "SFTP", "可用 SSH 登入的電腦或伺服器", null, v -> { holder[0].dismiss(); remoteForm(1); }));
         c.addView(overlay.sheetRow(R.drawable.ic_cloud, Ui.primaryContainer, Ui.primary, "WebDAV", "用網址連線，例如 Nextcloud", null, v -> { holder[0].dismiss(); remoteForm(2); }));
-        c.addView(overlay.sheetRow(R.drawable.ic_download, Ui.surfaceHigh, Ui.ink, "匯入 rclone 設定檔", "Google 雲端硬碟、OneDrive 等服務用這個加入；會取代目前所有連線", null, v -> { holder[0].dismiss(); importConfig(); }));
+        c.addView(overlay.sheetRow(R.drawable.ic_download, Ui.surfaceHigh, Ui.ink, "匯入 rclone 設定檔", "加入 Google 雲端硬碟、OneDrive 等（會取代現有連線）", null, v -> { holder[0].dismiss(); importConfig(); }));
         View pad = new View(this);
         c.addView(pad, new LinearLayout.LayoutParams(-1, Ui.dp(12)));
         holder[0] = overlay.new Sheet(scroll(c)).show();
@@ -1681,7 +1684,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         Field pass = formField(form, "密碼", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         Field extra = type == 0 ? formField(form, "網域（選填）", "通常不用填", text)
                 : type == 1 ? formField(form, "連接埠（選填）", "預設 22", InputType.TYPE_CLASS_NUMBER)
-                : formField(form, "服務類型（選填）", "一般不用填；Nextcloud 填 nextcloud", text);
+                : formField(form, "服務類型（選填）", "通常免填；Nextcloud 請填 nextcloud", text);
         LinearLayout buttons = Ui.row(this);
         buttons.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         buttons.setPadding(Ui.dp(16), Ui.dp(12), Ui.dp(16), Ui.dp(16));
@@ -1701,7 +1704,7 @@ public class MainActivity extends Activity implements PaneView.Host {
                 try { int port = Integer.parseInt(x); if (port < 1 || port > 65535) throw new NumberFormatException(); }
                 catch (NumberFormatException e) { extra.fail("連接埠要介於 1 到 65535。"); return; }
             }
-            if (TransferService.busy()) { message(null, "等傳輸完成再新增連線。"); return; }
+            if (TransferService.busy()) { message(null, "傳輸中無法新增連線。"); return; }
             save.setEnabled(false);
             save.setAlpha(.5f);
             save.setText("儲存中…");
@@ -1709,7 +1712,7 @@ public class MainActivity extends Activity implements PaneView.Host {
                 save.setEnabled(true);
                 save.setAlpha(1f);
                 save.setText("儲存");
-                if (r.code != 0) { message("無法儲存連線", "rclone 沒有接受這組設定。請確認主機或網址的格式，再試一次。"); return; }
+                if (r.code != 0) { message("無法儲存連線", "rclone 未接受這組設定，請檢查主機、網址與其他連線設定後再試一次。"); return; }
                 sheet.dismiss();
                 reloadRemotes();
                 load(panes[active], nm + ":", 1);
@@ -1721,9 +1724,9 @@ public class MainActivity extends Activity implements PaneView.Host {
     }
 
     void importConfig() {
-        if (TransferService.busy()) { message(null, "傳輸進行中，等完成後再匯入設定檔。"); return; }
+        if (TransferService.busy()) { message(null, "請等傳輸完成後再匯入設定檔。"); return; }
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
-        try { startActivityForResult(i, 41); } catch (Exception e) { message(null, "手機裡沒有能選擇檔案的 App。"); }
+        try { startActivityForResult(i, 41); } catch (Exception e) { message(null, "找不到可選擇檔案的 App。"); }
     }
 
     @Override protected void onActivityResult(int req, int result, Intent data) {
@@ -1732,13 +1735,13 @@ public class MainActivity extends Activity implements PaneView.Host {
         if (req != 41 || result != RESULT_OK || data == null || data.getData() == null) return;
         final Uri uri = data.getData();
         if (remotes.isEmpty()) { runImport(uri); return; }
-        overlay.new Dialog("匯入這份設定檔？", "目前的 " + remotes.size() + " 個連線會被設定檔裡的連線取代。要保留目前的連線，請先到設定匯出備份。")
+        overlay.new Dialog("匯入這份設定檔？", "目前的 " + remotes.size() + " 個連線會被覆蓋。若要保留現有連線，請先到「設定」匯出備份。")
                 .action("取消", Ui.ButtonStyle.TEXT, null)
                 .action("取代並匯入", Ui.ButtonStyle.FILLED, () -> runImport(uri)).show();
     }
 
     private void runImport(final Uri uri) {
-        if (TransferService.busy()) { message(null, "傳輸進行中，等完成後再匯入設定檔。"); return; }
+        if (TransferService.busy()) { message(null, "請等傳輸完成後再匯入設定檔。"); return; }
         final Overlay.Dialog progress = busyDialog("正在讀取設定…");
         worker.execute(() -> {
             try {
@@ -1761,7 +1764,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         });
     }
 
-     
+    /** After the connection list is replaced, drop anything that pointed at the old connections. */
     void afterConfigReplaced() {
         clipboard.clear();
         for (PaneView p : panes) {
@@ -1777,8 +1780,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         updateBars();
     }
 
-     
-     
+    // ============================================================================================
+    // Menu
 
     @Override public void showMenu(PaneView p, View anchor) {
         final Overlay.Menu m = overlay.new Menu(anchor);
@@ -1790,7 +1793,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         final boolean marked = Settings.isBookmarked(this, p.path);
         m.item(marked ? "移除書籤" : "加入書籤", false, () -> {
             Settings.toggleBookmark(this, p.path);
-            snack(marked ? "已移除書籤「" + p.label(p.path) + "」" : "已加入書籤「" + p.label(p.path) + "」，點左上角的位置圖示就能前往");
+            snack(marked ? "已移除書籤「" + p.label(p.path) + "」" : "已加入書籤「" + p.label(p.path) + "」，可從左上角位置選單開啟");
         });
         m.divider();
         m.add(sortPicker());
@@ -1898,12 +1901,12 @@ public class MainActivity extends Activity implements PaneView.Host {
     void enterPath(PaneView p) {
         EditText edit = field(p.path, "/storage/emulated/0/Download", false);
         edit.selectAll();
-        Overlay.Dialog d = overlay.new Dialog("前往路徑", "手機路徑從 /storage/emulated/0 開始；連線裡的資料夾寫成「連線名稱:資料夾」，例如 nas:相片。").view(edit);
+        Overlay.Dialog d = overlay.new Dialog("前往路徑", "本機路徑如 /storage/emulated/0；遠端路徑格式為「連線名稱:資料夾」（如 nas:相片）。").view(edit);
         d.action("取消", Ui.ButtonStyle.TEXT, null);
         d.button("前往", Ui.ButtonStyle.FILLED, () -> {
             String s = edit.getText().toString().trim();
             if (s.isEmpty()) { edit.setError("請輸入路徑。"); return; }
-             
+            // "/sdcard/..." and other aliases point at the same storage; show it under 手機.
             if (FileOps.isLocal(s)) {
                 try {
                     String real = new java.io.File(s).getCanonicalPath();
@@ -1917,10 +1920,10 @@ public class MainActivity extends Activity implements PaneView.Host {
         Overlay.showKeyboard(edit);
     }
 
-     
-     
+    // ============================================================================================
+    // Transfers
 
-     
+    /** The transfer list page (0.7.0; up to 0.6.0 a bottom sheet). */
     void showTransfers() {
         if (transferList != null) return;
         transferList = new TransferPages.ListPage(this, overlay, pages);
@@ -1928,7 +1931,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         transferList.page.show();
     }
 
-     
+    /** Share sheet for a file on the phone's own storage (0.7.3, used for transfer reports). */
     private boolean exportingReport;
 
     private void shareFile(java.io.File f) {
@@ -1936,7 +1939,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         Intent in = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM, u).putExtra(Intent.EXTRA_SUBJECT, f.getName())
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         in.setClipData(android.content.ClipData.newRawUri("傳輸分析報告", u));
-        try { startActivity(Intent.createChooser(in, "分享報告")); } catch (Exception e) { message(null, "手機裡沒有能分享檔案的 App。"); }
+        try { startActivity(Intent.createChooser(in, "分享報告")); } catch (Exception e) { message(null, "找不到可分享檔案的 App。"); }
     }
 
     void showTransferDetail(String id) {
@@ -1950,25 +1953,25 @@ public class MainActivity extends Activity implements PaneView.Host {
     private final TransferPages.Host pages = new TransferPages.Host() {
         @Override public String place(String path) { return displayPath(path); }
         @Override public void cancelAll() {
-            overlay.new Dialog("取消所有傳輸？", "進行中和排隊中的傳輸都會取消，已經傳完的檔案會保留。")
+            overlay.new Dialog("取消所有傳輸？", "進行中與排隊中的傳輸都會取消，已傳完的檔案會保留。")
                     .action("繼續傳輸", Ui.ButtonStyle.TEXT, null)
                     .action("取消全部", Ui.ButtonStyle.DANGER, TransferService::cancel).show();
         }
         @Override public void cancelJob(JSONObject job, boolean running) {
             String id = job.optString("id"), name = job.optString("name");
-             
+            // A waiting job has not touched any file yet, so it goes without asking.
             if (!running) { cancelled(TransferService.cancel(id), name); return; }
             boolean others = TransferService.queue().length() > 1;
-            overlay.new Dialog("取消「" + name + "」？", "已經傳完的檔案會保留，還沒傳的不會再傳。" + (others ? "排隊中的下一項會接著開始。" : ""))
+            overlay.new Dialog("取消「" + name + "」？", "已傳完的檔案會保留，這一項還沒傳的檔案不會再傳。" + (others ? "排隊中的下一項會接著開始。" : ""))
                     .action("繼續傳輸", Ui.ButtonStyle.TEXT, null)
                     .action("取消這一項", Ui.ButtonStyle.DANGER, () -> cancelled(TransferService.cancel(id), name)).show();
         }
-         
+        /** The job may have ended while the user decided; say so instead of doing nothing. */
         private void cancelled(boolean ok, String name) {
-            snack(ok ? "已取消「" + name + "」" : "「" + name + "」已經結束，沒有取消");
+            snack(ok ? "已取消「" + name + "」" : "「" + name + "」已結束，無須取消");
         }
         @Override public void clearFinished() {
-            overlay.new Dialog("清除已結束的紀錄？", "只刪除紀錄，不會動到任何檔案。進行中和排隊中的傳輸不受影響。")
+            overlay.new Dialog("清除已結束的紀錄？", "只清除已結束的紀錄，不影響檔案、進行中或排隊中的傳輸。")
                     .action("取消", Ui.ButtonStyle.TEXT, null)
                     .action("清除", Ui.ButtonStyle.FILLED, () -> {
                         int n = TransferService.clearFinished(MainActivity.this);
@@ -1976,7 +1979,7 @@ public class MainActivity extends Activity implements PaneView.Host {
                     }).show();
         }
         @Override public void runAgain(JSONObject r) {
-             
+            // After it is queued, go back to the list so the new job is in view.
             runTransfer(r.optString("src"), r.optString("dst"), r.optBoolean("directory"), r.optString("kind"), false,
                     () -> { if (transferDetail != null) transferDetail.page.dismiss(); });
         }
@@ -1995,19 +1998,19 @@ public class MainActivity extends Activity implements PaneView.Host {
             }
         }
         @Override public void chooseCompare() {
-            TransferPages.chooseCompare(MainActivity.this, overlay, () -> snack("比對方式改成「" + Settings.compareName(Settings.compare(MainActivity.this)) + "」，下一次同步開始生效"));
+            TransferPages.chooseCompare(MainActivity.this, overlay, () -> snack("比對方式改成「" + Settings.compareName(Settings.compare(MainActivity.this)) + "」，下次同步生效"));
         }
         @Override public void openDetail(String id) { showTransferDetail(id); }
         @Override public void exportReport(String id) {
-            if (exportingReport) { snack("報告正在產生，請稍候…"); return; }
+            if (exportingReport) { snack("正在產生報告，請稍候…"); return; }
             exportingReport = true;
-            snack("正在產生分析報告，不會重新掃描檔案…");
+            snack("正在整理分析報告…");
             new Thread(() -> {
                 try {
                     java.io.File f = ReportExport.export(MainActivity.this, id);
                     handler.post(() -> {
                         exportingReport = false;
-                        overlay.new Dialog("分析報告已存好", "大小：" + FileOps.size(f.length()) + "。\n已存到 Download／RcloneNext報告。\n包含錯誤與未刪除原因，單份最多 100 MB。可按「分享」傳出文字檔。")
+                        overlay.new Dialog("分析報告已存好", "大小：" + FileOps.size(f.length()) + "。\n已存入 Download／RcloneNext報告。包含錯誤與未刪除原因，單份報告最多 100 MB；可點「分享」傳送文字檔。")
                             .action("知道了", Ui.ButtonStyle.TEXT, null)
                             .action("分享", Ui.ButtonStyle.FILLED, () -> shareFile(f)).show();
                     });
@@ -2016,8 +2019,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         }
     };
 
-     
-     
+    // ============================================================================================
+    // Saved jobs ("常用工作")
 
     static String kindLabel(String kind) {
         switch (kind) {
@@ -2038,9 +2041,9 @@ public class MainActivity extends Activity implements PaneView.Host {
 
     private void saveJob(String src, String dst, boolean directory, String kind) { saveJob(src, dst, directory, kind, null); }
 
-     
+    /** onSaved runs after a successful save, e.g. so the sync sheet can show that it is saved. */
     private void saveJob(String src, String dst, boolean directory, String kind, Runnable onSaved) {
-         
+        // Copy and move store the full target path (folder + item name); name the folder instead.
         boolean sync = TransferService.FILL.equals(kind) || TransferService.MIRROR.equals(kind);
         EditText edit = field(placeName(src) + " → " + placeName(sync ? dst : parent(dst)), "名稱", false);
         edit.selectAll();
@@ -2052,8 +2055,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(-1, -2);
         dp.topMargin = Ui.dp(12);
         box.addView(detail, dp);
-        String how = sync ? "；同步會再問你要先比對還是直接開始。" : TransferService.MOVE.equals(kind) ? "；移動會先確認。" : "。";
-        final Overlay.Dialog d = overlay.new Dialog("存成常用工作", "之後在右上角選單的「常用工作」按「執行」就能再做一次" + how).view(box);
+        String how = sync ? "；執行同步時可選擇先比對或直接開始。" : TransferService.MOVE.equals(kind) ? "；移動會先確認。" : "。";
+        final Overlay.Dialog d = overlay.new Dialog("存成常用工作", "之後可從右上角選單的「常用工作」隨時執行" + how).view(box);
         d.button("取消", Ui.ButtonStyle.TEXT, null);
         d.button("儲存", Ui.ButtonStyle.FILLED, () -> {
             String name = edit.getText().toString().trim();
@@ -2086,7 +2089,7 @@ public class MainActivity extends Activity implements PaneView.Host {
             empty.addView(disc, dl);
             TextView t = Ui.title(this, "還沒有常用工作", 17, Ui.ink);
             empty.addView(t);
-            TextView m = Ui.text(this, "兩種存法：在雙窗格的「同步設定」按「存成常用工作」；或傳輸結束後，在「傳輸紀錄」點那一筆，選「存成常用工作」。之後在這裡按「執行」，就能用同樣的來源和目的地再做一次。", 14.5f, Ui.muted);
+            TextView m = Ui.text(this, "可在雙窗格的「同步設定」或「傳輸紀錄」明細中點「存成常用工作」。儲存後就能在這裡快速重跑相同的傳輸。", 14.5f, Ui.muted);
             m.setGravity(Gravity.CENTER);
             m.setLineSpacing(0, 1.25f);
             m.setPadding(0, Ui.dp(6), 0, 0);
@@ -2098,7 +2101,7 @@ public class MainActivity extends Activity implements PaneView.Host {
             content.addView(empty);
         } else {
             for (SavedJobs.Job job : jobs) content.addView(savedJobRow(job, holder));
-            TextView note = Ui.text(this, "複製和移動遇到同名檔案不覆蓋，直接略過；移動會先確認。同步只改目的地，可以先比對再開始，也可以直接開始。", 12.5f, Ui.muted);
+            TextView note = Ui.text(this, "複製與移動遇同名檔案會略過、不覆蓋；移動會先確認。同步只修改目的地，執行時可選擇先比對或直接開始。", 12.5f, Ui.muted);
             note.setLineSpacing(0, 1.2f);
             note.setPadding(Ui.dp(24), Ui.dp(10), Ui.dp(24), Ui.dp(16));
             content.addView(note);
@@ -2120,7 +2123,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         LinearLayout texts = Ui.column(this);
         texts.addView(Ui.oneLine(Ui.title(this, job.name, 16, Ui.ink), TextUtils.TruncateAt.END));
         texts.addView(Ui.oneLine(Ui.text(this, kindLabel(job.kind), 13, Ui.muted), TextUtils.TruncateAt.END));
-         
+        // Two lines cut from the start, so the folder names that tell jobs apart stay visible.
         String from = displayPath(job.src), to = displayPath(job.isSync() ? job.dst : parent(job.dst));
         texts.addView(routeLine("從", from));
         texts.addView(routeLine("到", to));
@@ -2131,7 +2134,7 @@ public class MainActivity extends Activity implements PaneView.Host {
             holder[0].dismiss();
             runTransfer(job.src, job.dst, job.directory, job.kind, true, () -> SavedJobs.markRun(this, job.id));
         });
-        run.setContentDescription("執行「" + job.name + "」，" + (job.isSync() ? "會先問要先比對還是直接開始" : TransferService.MOVE.equals(job.kind) ? "會先確認" : "直接開始複製"));
+        run.setContentDescription("執行「" + job.name + "」，" + (job.isSync() ? "會詢問要先比對或直接開始" : TransferService.MOVE.equals(job.kind) ? "會先確認" : "直接開始複製"));
         LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, -2);
         rp.leftMargin = Ui.dp(8);
         r.addView(run, rp);
@@ -2145,7 +2148,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         return r;
     }
 
-     
+    /** "從" or "到" stays whole; the path is cut from the start so its last folders remain readable. */
     private View routeLine(String label, String path) {
         LinearLayout line = Ui.row(this);
         TextView l = Ui.text(this, label + " ", 13, Ui.muted);
@@ -2172,7 +2175,7 @@ public class MainActivity extends Activity implements PaneView.Host {
     }
 
     private void deleteJob(SavedJobs.Job job, Overlay.Sheet sheet) {
-        overlay.new Dialog("刪除常用工作「" + job.name + "」？", "只刪除這筆設定，不會動到任何檔案。")
+        overlay.new Dialog("刪除常用工作「" + job.name + "」？", "只移除這筆設定，不影響實際檔案。")
                 .action("取消", Ui.ButtonStyle.TEXT, null)
                 .action("刪除", Ui.ButtonStyle.DANGER, () -> {
                     try { SavedJobs.delete(this, job.id); } catch (Exception e) { error(e); return; }
@@ -2181,11 +2184,15 @@ public class MainActivity extends Activity implements PaneView.Host {
                 }).show();
     }
 
-     
+    /**
+     * Runs a transfer again from its paths: a saved job or a finished record. Copy goes straight to the
+     * queue (it never overwrites), move asks first (it removes the source), and both sync methods open
+     * the sync sheet with the method fixed, where the user compares first or starts at once.
+     */
     void runTransfer(String src, String dst, boolean directory, String kind, boolean savedJob, Runnable onStart) {
         try { TransferService.validateTransfer(src, dst, directory); } catch (Exception e) { error(e); return; }
         if (FileOps.isLocal(src) && !new java.io.File(src).exists()) {
-            message("找不到來源", "「" + displayPath(src) + "」已經不在了，可能被移動、改名或刪除。");
+            message("找不到來源", "「" + displayPath(src) + "」不存在，可能已移動、改名或刪除。");
             return;
         }
         if (TransferService.FILL.equals(kind) || TransferService.MIRROR.equals(kind)) {
@@ -2204,7 +2211,7 @@ public class MainActivity extends Activity implements PaneView.Host {
             } catch (Exception e) { error(e); }
         });
         if (!move) { go.run(); return; }
-        overlay.new Dialog("移動「" + placeName(src) + "」？", "會搬到「" + displayPath(parent(dst)) + "」，搬過去的檔案會從來源刪除。目的地已有同名檔案的會略過，來源那份保留。")
+        overlay.new Dialog("移動「" + placeName(src) + "」？", "會搬到「" + displayPath(parent(dst)) + "」，傳完後刪除來源檔案；目的地已有同名檔案時會略過，來源那份保留。")
                 .action("取消", Ui.ButtonStyle.TEXT, null)
                 .action("移動", Ui.ButtonStyle.FILLED, go).show();
     }
@@ -2240,7 +2247,7 @@ public class MainActivity extends Activity implements PaneView.Host {
         return "傳輸";
     }
 
-     
+    /** After a run of transfers ends, briefly report how it went. */
     private void finishPill() {
         JSONArray rows = TransferService.history(this);
         int failed = 0, cancelled = 0, done = 0, nothingNew = 0;
@@ -2263,8 +2270,8 @@ public class MainActivity extends Activity implements PaneView.Host {
         handler.postDelayed(hidePill, failed > 0 ? 8000 : 4000);
     }
 
-     
-     
+    // ============================================================================================
+    // Helpers
 
     interface Work { Rclone.Result run(); }
     interface Done { void done(Rclone.Result r); }
@@ -2327,22 +2334,22 @@ public class MainActivity extends Activity implements PaneView.Host {
     }
 
     void error(Throwable e) {
-        message(null, e.getMessage() == null ? "操作沒有完成，請再試一次。" : e.getMessage());
+        message(null, e.getMessage() == null ? "操作失敗，請再試一次。" : e.getMessage());
     }
 
-     
+    /** When the setting is on and the phone is on mobile data, confirm before a network transfer. */
     void whenNetworkOk(boolean usesNetwork, Runnable go) {
         android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
         android.net.NetworkCapabilities caps = cm == null ? null : cm.getNetworkCapabilities(cm.getActiveNetwork());
         boolean cellular = caps != null && caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR);
         if (!usesNetwork || !cellular || !Settings.askMobileData(this)) { go.run(); return; }
-        overlay.new Dialog("要用行動數據傳輸嗎？", "手機目前使用行動數據，大檔案可能用掉不少流量。")
+        overlay.new Dialog("要用行動數據傳輸嗎？", "目前使用行動數據，傳大檔案可能會消耗較多流量。")
                 .action("取消", Ui.ButtonStyle.TEXT, null)
                 .action("仍要傳輸", Ui.ButtonStyle.FILLED, go).show();
     }
 
-     
-     
+    // ============================================================================================
+    // Back
 
     @Override public void onBackPressed() {
         if (overlay.back()) return;

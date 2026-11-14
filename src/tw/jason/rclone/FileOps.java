@@ -2,6 +2,10 @@ package tw.jason.rclone;
 
 import android.content.Context;
 import android.net.Uri;
+import android.system.ErrnoException;
+import android.system.Os;
+import android.system.OsConstants;
+import android.system.StructStat;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -16,11 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Thin boundary between the screens and the engine. Every rclone command, its arguments and its
- * safety checks are the ones the 0.1.0 screen used; only their location changed. Transfers still go
- * through {@link TransferService}, which is untouched.
- */
+/** File browsing and metadata operations. Content transfers use {@link TransferService}. */
 final class FileOps {
     private FileOps() {}
 
@@ -50,7 +50,7 @@ final class FileOps {
         }
         // Up to 5 minutes: a very large folder on a slow NAS can take longer than the 90 s default, and the
         // screen offers "停止讀取" meanwhile.
-        Rclone.Result r = Rclone.run(c, 300, "lsjson", "--contimeout", Settings.listConnectTimeout(c), "--timeout", Settings.listIdleTimeout(c), "--retries", "1", "--low-level-retries", "1", "--", destination);
+        Rclone.Result r = Rclone.run(c, 300, "lsjson", "--no-mimetype", "--contimeout", Settings.listConnectTimeout(c), "--timeout", Settings.listIdleTimeout(c), "--retries", "1", "--low-level-retries", "1", "--", destination);
         if (r.code != 0) throw new IOException(friendlyError(r.err));
         try {
             JSONArray items = new JSONArray(r.out);
@@ -73,18 +73,100 @@ final class FileOps {
     static String friendlyError(String e) {
         String s = e == null ? "" : e.toLowerCase();
         // 0.7.1: the destination refused a name (memory cards reject some characters).
-        if (s.contains("invalid argument")) return "目的地不接受這個名稱，資料夾或檔案沒有建立。";
-        if (s.contains("too_long")) return "超過 App 的等待時間，已經停止，不一定是連線問題。項目很多時，請改用裡面較小的資料夾。";
-        if (s.contains("permission denied") || s.contains("access denied") || s.contains("403")) return "沒有存取權限，請確認帳號與資料夾權限。";
+        if (s.contains("invalid argument")) return "目的地不接受這個名稱，無法建立。";
+        if (s.contains("too_long")) return "操作超過等待時間，已停止。這不一定是連線問題。";
+        if (s.contains("permission denied") || s.contains("access denied") || s.contains("403")) return "沒有權限，請檢查帳號與資料夾權限。";
         if (s.contains("not found") || s.contains("not exist")) return "找不到這個位置。";
-        if (s.contains("timeout") || s.contains("逾時")) return "連線逾時，請確認網路與主機是否開著。";
+        if (s.contains("timeout") || s.contains("逾時")) return "連線逾時，請檢查網路與主機狀態。";
         if (s.contains("refused") || s.contains("no such host")) return "連不到主機，請確認位址與連接埠。";
-        return "請確認網路、連線設定及檔案權限。";
+        return "請檢查網路、連線設定與檔案權限。";
     }
 
     static Rclone.Result mkdir(Context c, String path) { return Rclone.run(c, "mkdir", "--", path); }
 
     static Rclone.Result stat(Context c, String path) { return Rclone.run(c, "lsjson", "--stat", "--", path); }
+
+    /** Rename is a sibling metadata operation, not a copy/move transfer with content filters. */
+    static synchronized Rclone.Result rename(Context c, Entry entry, String name) {
+        if (name == null || name.trim().isEmpty() || name.equals(".") || name.equals("..")
+                || name.indexOf('/') >= 0 || name.indexOf(':') >= 0 || name.indexOf('\0') >= 0 || name.indexOf('\n') >= 0)
+            return new Rclone.Result(1, "", "名稱不能空白，也不能包含 /、: 或換行。");
+        if (TransferService.pathInUse(entry.path))
+            return new Rclone.Result(1, "", "這個位置正有檔案在傳輸，請完成或取消後再改名。");
+        if (isLocal(entry.path)) {
+            File source = new File(entry.path), parent = source.getParentFile();
+            if (parent == null) return new Rclone.Result(1, "", "這個位置不能重新命名。");
+            File target = new File(parent, name);
+            try {
+                StructStat before = Os.lstat(source.getPath());
+                if (source.getName().equals(name)) return new Rclone.Result(0, "", "");
+                if (Settings.cardRefuses(name) && !Settings.cardNameFilters(target.getPath()).isEmpty())
+                    return new Rclone.Result(1, "", "這張記憶卡存不了結尾是句點或空格的名稱。");
+                boolean caseAlias = false;
+                try {
+                    StructStat existing = Os.lstat(target.getPath());
+                    // On a case-insensitive volume the other spelling may be the same entry. A real
+                    // second entry (including a hard link) must never be overwritten.
+                    String[] names = parent.list();
+                    boolean literalTarget = names == null || Arrays.asList(names).contains(name);
+                    if (literalTarget || before.st_dev != existing.st_dev || before.st_ino != existing.st_ino
+                            || !source.getName().equalsIgnoreCase(name))
+                        return new Rclone.Result(1, "", "這裡已經有「" + name + "」。");
+                    caseAlias = true;
+                } catch (ErrnoException missing) { if (missing.errno != OsConstants.ENOENT) throw missing; }
+                // Unlike a transfer, rename never falls back to copying the contents.
+                if (caseAlias) {
+                    // FAT can report success without changing a case-only name. Two metadata
+                    // renames avoid that no-op; the contents are never walked or copied.
+                    File temporary;
+                    do { temporary = new File(parent, ".rclonenext-rename-" + java.util.UUID.randomUUID()); }
+                    while (java.nio.file.Files.exists(temporary.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS));
+                    Os.rename(source.getPath(), temporary.getPath());
+                    try { Os.rename(temporary.getPath(), target.getPath()); }
+                    catch (ErrnoException failed) {
+                        try { Os.rename(temporary.getPath(), source.getPath()); }
+                        catch (ErrnoException rollback) {
+                            return new Rclone.Result(1, "", "改名未完成，內容保留在「" + temporary.getName() + "」。");
+                        }
+                        throw failed;
+                    }
+                } else Os.rename(source.getPath(), target.getPath());
+                return new Rclone.Result(0, "", "");
+            } catch (ErrnoException error) {
+                String reason = error.errno == OsConstants.ENOENT ? "找不到原本的檔案或資料夾。"
+                        : error.errno == OsConstants.EACCES || error.errno == OsConstants.EPERM ? "沒有重新命名的權限。"
+                        : error.errno == OsConstants.EROFS ? "這個儲存空間只能讀取。"
+                        : error.errno == OsConstants.EINVAL ? "這個儲存空間不接受新名稱。" : "無法重新命名，請確認存取權限與新名稱。";
+                return new Rclone.Result(1, "", reason);
+            }
+        }
+        int separator = Math.max(entry.path.lastIndexOf('/'), entry.path.indexOf(':'));
+        if (separator < 1 || entry.path.endsWith(":")) return new Rclone.Result(1, "", "這個位置不能重新命名。");
+        String parent = entry.path.substring(0, separator + (entry.path.charAt(separator) == ':' ? 1 : 0));
+        String target = join(parent, name);
+        if (target.equals(entry.path)) return new Rclone.Result(0, "", "");
+        Rclone.Result features = Rclone.run(c, "backend", "features", "--", parent);
+        if (features.code != 0) return new Rclone.Result(features.code, "", friendlyError(features.err));
+        try {
+            JSONObject capabilities = new JSONObject(features.out).getJSONObject("Features");
+            if (!capabilities.optBoolean(entry.dir ? "DirMove" : "Move"))
+                return new Rclone.Result(1, "", "這個連線不支援直接重新命名" + (entry.dir ? "資料夾。" : "檔案。"));
+            // Check both file and folder names in the parent once, without reading MIME types,
+            // times or anything inside the directory being renamed.
+            Rclone.Result listed = Rclone.run(c, "lsjson", "--no-mimetype", "--no-modtime", "--retries", "1",
+                    "--low-level-retries", "1", "--contimeout", Settings.connectTimeout(c), "--timeout", Settings.idleTimeout(c), "--", parent);
+            if (listed.code != 0) return new Rclone.Result(listed.code, "", friendlyError(listed.err));
+            JSONArray siblings = new JSONArray(listed.out);
+            for (int i=0; i<siblings.length(); i++) {
+                String existing = siblings.getJSONObject(i).getString("Name");
+                if (name.equals(existing) || capabilities.optBoolean("CaseInsensitive") && name.equalsIgnoreCase(existing))
+                    return new Rclone.Result(1, "", "這裡已經有「" + name + "」。");
+            }
+        } catch (JSONException error) { return new Rclone.Result(1, "", "無法確認這個連線是否支援重新命名。"); }
+        Rclone.Result result = Rclone.run(c, "moveto", "--ignore-existing", "--no-traverse", "--retries", "1",
+                "--low-level-retries", "1", "--contimeout", Settings.connectTimeout(c), "--timeout", Settings.idleTimeout(c), "--", entry.path, target);
+        return result.code == 0 ? result : new Rclone.Result(result.code, "", friendlyError(result.err));
+    }
 
     /** Up to an hour: deleting a folder with many files on a NAS takes long, and stopping halfway leaves it half deleted. */
     static Rclone.Result delete(Context c, Entry e) { return Rclone.run(c, 3600, e.dir ? "purge" : "deletefile", "--", e.path); }

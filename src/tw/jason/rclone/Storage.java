@@ -96,7 +96,7 @@ final class Storage {
         return best;
     }
 
-    /** "記憶卡/Download/example": the volume's name, then the path inside it (0.7.2). */
+    /** "記憶卡/EhViewer/download": the volume's name, then the path inside it (0.7.2). */
     static String label(Context c, String path) {
         Volume v = volumeFor(c, path);
         if (v == null) return path;

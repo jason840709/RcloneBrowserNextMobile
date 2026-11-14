@@ -1,6 +1,6 @@
 package tw.jason.rclone;
 
- 
+/** Credentials are redacted without shortening file paths or treating '?' in a filename as a URL query. */
 public final class ReportPrivacy {
     private ReportPrivacy() {}
     public static String redact(String text) {

@@ -1,12 +1,23 @@
-Rclone Browser Next Mobile 0.7.4
+Rclone Browser Next for Android 0.3.0
 
-Bundled engine: rclone v1.75.2, Android ARM64, Go 1.26.9.
-Official executable, used unchanged under the filename librclone.so.
-Download: https://beta.rclone.org/v1.75.2/testbuilds/rclone-android-21-armv8a.gz
-Source: https://github.com/rclone/rclone/tree/v1.75.2
-Build recipe: https://github.com/rclone/rclone/blob/v1.75.2/.github/workflows/build.yml
-License: MIT; see RCLONE-LICENSE.txt.
-Dependency inventory: https://github.com/rclone/rclone/blob/v1.75.2/go.mod
+The Android interface and service wrapper were written for this project.
+No ES File Explorer source code, icons, or other assets are included.
+No Round Sync application Java source is included.
 
-Desktop design and icon: https://github.com/jason840709/RcloneBrowserNext
-The mobile interface and service wrapper are implemented in this project.
+Bundled engine: rclone v1.75.2 (Android ARM64, Go 1.26.9, NDK r27d, Android API 21)
+Official build from the rclone project's own release pipeline, used unchanged
+(renamed to librclone.so so Android installs it as an executable):
+https://beta.rclone.org/v1.75.2/testbuilds/rclone-android-21-armv8a.gz
+Build recipe (android job): https://github.com/rclone/rclone/blob/v1.75.2/.github/workflows/build.yml
+Engine source: https://github.com/rclone/rclone/tree/v1.75.2
+Rclone license: MIT; see RCLONE-LICENSE.txt.
+Dependency source/license inventory: https://github.com/rclone/rclone/blob/v1.75.2/go.mod
+
+Versions 0.1.0 to 0.2.1 bundled rclone 1.68.0-extract taken unchanged from the
+Round Sync v2.5.6 arm64 release (https://github.com/newhinton/Round-Sync/releases/tag/v2.5.6).
+Round Sync application source is GPL-3.0; it is reference material, not incorporated into this interface.
+
+Reference desktop design and app icon (by the same author):
+https://github.com/jason840709/RcloneBrowserNext
+Reference interaction study:
+User-supplied ES File Explorer 4.4.0.6 package, static resources only.

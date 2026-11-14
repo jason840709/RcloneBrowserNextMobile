@@ -246,7 +246,7 @@ final class PaneView extends LinearLayout {
         LayoutParams tl = new LayoutParams(-2, -2);
         tl.topMargin = Ui.dp(14);
         card.addView(loadingTitle, tl);
-        loadingHint = Ui.text(c, "項目很多或網路較慢時會比較久。停止讀取會留在原本的資料夾。", 13.5f, Ui.muted);
+        loadingHint = Ui.text(c, "檔案較多或網路慢時需稍候，停止讀取會留在原資料夾。", 13.5f, Ui.muted);
         loadingHint.setGravity(Gravity.CENTER);
         loadingHint.setPadding(0, Ui.dp(6), 0, 0);
         loadingHint.setVisibility(GONE);
@@ -444,7 +444,7 @@ final class PaneView extends LinearLayout {
         stateView.removeAllViews();
         boolean showList = true;
         if (FileOps.isLocal(path) && host.needsAccess(path)) {
-            state(R.drawable.ic_lock, "需要檔案存取權限", "允許後才能瀏覽手機裡的檔案。");
+            state(R.drawable.ic_lock, "需要檔案存取權限", "授權後才能瀏覽本機檔案。");
             stateButton("允許檔案存取", Ui.ButtonStyle.FILLED, host::requestAccess);
             showList = false;
         } else if (!error.isEmpty()) {
@@ -456,7 +456,7 @@ final class PaneView extends LinearLayout {
             showList = false;
         } else if (shown.isEmpty() && loadedOnce && !loading) {
             if (!filter.isEmpty()) state(R.drawable.ic_search, "找不到「" + filter + "」", null);
-            else if (hiddenCount > 0) state(R.drawable.ic_visibility, "只有隱藏的項目", "從右上角選單開啟「顯示隱藏檔」就能看到。");
+            else if (hiddenCount > 0) state(R.drawable.ic_visibility, "只有隱藏的檔案或資料夾", "可從右上角選單開啟「顯示隱藏檔」。");
             else state(R.drawable.ic_folder_open, "這個資料夾是空的", null);
         }
         stateView.setVisibility(stateView.getChildCount() > 0 ? VISIBLE : GONE);

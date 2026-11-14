@@ -138,18 +138,18 @@ public class SettingsActivity extends Activity {
             Settings.prefs(this).edit().putInt(Settings.NIGHT, i).apply();
             recreate();
         });
-        switchRow("App 圖示跟著配色", "主畫面圖示的顏色跟著配色。有些手機會因此移除主畫面上的捷徑，要從 App 清單重新拖出來。",
+        switchRow("App 圖示跟著配色", "切換時，部分手機桌面的捷徑可能會消失，需從 App 清單重新拉出。",
                 Settings.iconFollows(this), on -> {
                     Settings.prefs(this).edit().putBoolean(Settings.ICON_FOLLOWS, on).apply();
                     LauncherIcon.apply(this);
                 });
-        switchRow("緊湊清單", "每一列比較矮，一頁可以看到更多檔案。", Settings.dense(this),
+        switchRow("緊湊清單", "縮小列高，同畫面可顯示更多檔案。", Settings.dense(this),
                 on -> Settings.prefs(this).edit().putBoolean(Settings.DENSE, on).apply());
-        switchRow("顯示縮圖", "只用於本機與記憶卡裡的圖片和影片。", Settings.thumbnails(this),
+        switchRow("顯示縮圖", "僅限本機與記憶卡的圖片、影片。", Settings.thumbnails(this),
                 on -> Settings.prefs(this).edit().putBoolean(Settings.THUMBNAILS, on).apply());
 
         section("瀏覽");
-        switchRow("顯示隱藏檔", "名稱以句點開頭的檔案和資料夾。", Settings.hidden(this),
+        switchRow("顯示隱藏檔", "以「.」開頭的檔案與資料夾。", Settings.hidden(this),
                 on -> Settings.prefs(this).edit().putBoolean(Settings.HIDDEN, on).apply());
         choiceRow("開啟 App 時", new String[]{"回到上次的位置", "從本機開始"}, Settings.startAt(this),
                 i -> Settings.prefs(this).edit().putInt(Settings.START_AT, i).apply());
@@ -160,28 +160,28 @@ public class SettingsActivity extends Activity {
         final int[] counts = {1, 2, 4, 8};
         choiceRow("同時傳輸的檔案數", new String[]{"1 個", "2 個", "4 個（預設）", "8 個"}, indexOf(counts, Settings.transfers(this), 2),
                 i -> Settings.prefs(this).edit().putInt(Settings.TRANSFERS, counts[i]).apply(),
-                "數量越多，大量小檔案傳得越快；有些伺服器會限制同時連線數。");
+                "調高可加快大量小檔案傳輸；若伺服器限制連線數可調低。");
         // 0.7.0: checkers can be set, as in the desktop app. "自動" keeps the rule used up to 0.6.0.
         final int[] checks = {0, 4, 8, 16, 32};
         choiceRow("同時比對的檔案數", new String[]{"自動（預設）", "4 個", "8 個", "16 個", "32 個"},
                 indexOf(checks, Settings.prefs(this).getInt(Settings.CHECKERS, 0), 0),
                 i -> Settings.prefs(this).edit().putInt(Settings.CHECKERS, checks[i]).apply(),
-                "同步時同時比對兩邊檔案的數量。比對很慢時可以調高，但會同時開更多連線；NAS 很忙或限制連線數時，調低反而比較穩。自動是上一項「同時傳輸的檔案數」的兩倍，最少 8 個。");
+                "比對太慢可調高；若 NAS 負載高或限制連線數，調低較穩定。「自動」為同時傳輸數的 2 倍（最少 8 個）。");
         compareRow();
         final int[] limits = {0, 1, 5, 10, 50};
         choiceRow("傳輸速度上限", new String[]{"不限制（預設）", "每秒 1 MB", "每秒 5 MB", "每秒 10 MB", "每秒 50 MB"}, indexOf(limits, Settings.bandwidthMB(this), 0),
                 i -> Settings.prefs(this).edit().putInt(Settings.BWLIMIT, limits[i]).apply(),
-                "限制傳輸的速度，避免佔滿網路。");
-        switchRow("網路較慢時延長等待", "連線最多等 60 秒、傳輸中沒有資料最多等 5 分鐘；一般是 15 秒和 1 分鐘。",
+                "限制頻寬，避免佔滿網路。");
+        switchRow("網路較慢時延長等待", "連線逾時改為 60 秒、傳輸無回應改為 5 分鐘（預設為 15 秒與 1 分鐘）。",
                 Settings.slowNetwork(this), on -> Settings.prefs(this).edit().putBoolean(Settings.SLOW_NETWORK, on).apply());
-        switchRow("用行動數據傳輸前先詢問", "要傳的檔案在 NAS 或雲端連線上、而手機正在使用行動數據時，先跳出確認。",
+        switchRow("用行動數據傳輸前先詢問", "使用行動數據傳送遠端檔案前，先跳出提醒。",
                 Settings.askMobileData(this), on -> Settings.prefs(this).edit().putBoolean(Settings.ASK_MOBILE, on).apply());
-        note("傳輸設定從下一個開始的傳輸生效，進行中的傳輸不受影響。");
-        actionRow("清理 0.7.1 多寫的重複檔案", "0.7.1 把名稱含全形「？」「：」等字元的檔案另存了一份，名稱多了「‛」。這裡找出這些重複的並刪除；原本名稱的那份不會動。", this::cleanDuplicates);
+        note("更改後自下一筆傳輸生效，不影響進行中的工作。");
+        actionRow("清理 0.7.1 重複檔案", "0.7.1 曾將含全形符號（如「？」「：」）的名稱多存一份含「‛」的檔案。此工具可找出並刪除重複檔，保留原檔。", this::cleanDuplicates);
 
         section("連線設定檔");
-        actionRow("匯入 rclone 設定檔", "用設定檔裡的連線取代目前所有連線。", this::startImport);
-        actionRow("匯出 rclone 設定檔", "把目前的連線存成一個檔案備份。檔案裡的密碼只做簡單編碼，拿到檔案的人都能還原成原本的密碼，請妥善保管。", this::startExport);
+        actionRow("匯入 rclone 設定檔", "匯入設定檔，會取代現有連線。", this::startImport);
+        actionRow("匯出 rclone 設定檔", "備份目前的連線設定。檔內密碼僅簡單編碼、容易被還原，請妥善保管。", this::startExport);
 
         section("權限");
         fileAccessState = actionRow("檔案存取", "", this::openFileAccess);
@@ -196,7 +196,7 @@ public class SettingsActivity extends Activity {
         actionRow("授權說明", null, this::licenses);
         actionRow("專案網頁", "GitHub 上的原始碼、使用手冊與問題回報", () -> {
             try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(PROJECT_PAGE))); }
-            catch (Exception e) { message("手機裡沒有能開啟網頁的 App。"); }
+            catch (Exception e) { message("找不到可開啟網頁的瀏覽器。"); }
         });
 
         worker.execute(() -> {
@@ -210,10 +210,10 @@ public class SettingsActivity extends Activity {
         if (fileAccessState == null) return;
         boolean files = Build.VERSION.SDK_INT >= 30 ? Environment.isExternalStorageManager()
                 : checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
-        fileAccessState.setText(files ? "已允許" : "未允許：無法瀏覽本機和記憶卡。點這裡前往系統設定。");
+        fileAccessState.setText(files ? "已允許" : "未授權：無法讀寫本機與記憶卡，點此前往設定。");
         fileAccessState.setTextColor(files ? Ui.muted : Ui.error);
         boolean notify = Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-        notifyState.setText(notify ? "已允許" : "未允許：背景傳輸時看不到進度通知。點這裡前往系統設定。");
+        notifyState.setText(notify ? "已允許" : "未授權：背景傳輸時不會顯示進度通知，點此前往設定。");
         notifyState.setTextColor(notify ? Ui.muted : Ui.error);
         worker.execute(() -> {
             long size = sizeOf(getCacheDir());
@@ -327,7 +327,7 @@ public class SettingsActivity extends Activity {
     /** 0.7.2: finds 0.7.1's duplicates under the local destinations of past transfers, then deletes them after confirmation. */
     private void cleanDuplicates() {
         final java.util.List<File> roots = DuplicateCleanup.roots(this);
-        if (roots.isEmpty()) { message("傳輸紀錄裡沒有手機或記憶卡上的目的地資料夾，沒有可以檢查的地方。"); return; }
+        if (roots.isEmpty()) { message("傳輸紀錄中沒有本機或記憶卡的目的地資料夾可供檢查。"); return; }
         LinearLayout box = Ui.column(this);
         final TextView count = Ui.text(this, "正在檢查…", 14.5f, Ui.muted);
         box.addView(new TransferUi.Ring(this, Ui.primary), new LinearLayout.LayoutParams(Ui.dp(28), Ui.dp(28)));
@@ -348,18 +348,18 @@ public class SettingsActivity extends Activity {
     private void showDuplicates(java.util.List<File> roots, DuplicateCleanup.Result r) {
         StringBuilder where = new StringBuilder();
         for (File f : roots) where.append(where.length() > 0 ? "、" : "").append("「").append(Storage.label(this, f.getAbsolutePath())).append("」");
-        String later = r.withoutOriginal.isEmpty() ? "" : "\n\n另有 " + MainActivity.count(r.withoutOriginal.size()) + " 項還找不到原本名稱的那份，這次不刪；先用「讓目的地和來源一模一樣」同步一次補上原本的，再回來清理。";
+        String later = r.withoutOriginal.isEmpty() ? "" : "\n\n另有 " + MainActivity.count(r.withoutOriginal.size()) + " 項旁找不到原名檔案，暫不刪除；請先用「讓目的地和來源一模一樣」同步補齊原檔後再清理。";
         if (r.duplicates.isEmpty()) { message("在" + where + "沒有找到可以刪除的重複項目。" + later); return; }
         StringBuilder ex = new StringBuilder();
         for (int i = 0; i < Math.min(3, r.duplicates.size()); i++) ex.append("\n・").append(r.duplicates.get(i).getName());
         String what = (r.folders > 0 ? MainActivity.count(r.folders) + " 個重複資料夾" : "") + (r.folders > 0 && r.files > 0 ? "、" : "") + (r.files > 0 ? MainActivity.count(r.files) + " 個重複檔案" : "");
-        String body = "在" + where + "找到 " + what + "，原本名稱的那份都在。例如：" + ex
-                + "\n\n只刪這裡重複的那份，刪除後無法復原；來源（例如 NAS）上的檔案不受影響。" + later;
-        overlay.new Dialog("刪除 0.7.1 多寫的重複項目？", body)
+        String body = "在" + where + "找到 " + what + "（原名檔案皆在）。例如：" + ex
+                + "\n\n只會刪除多出的重複檔（無法復原），不影響原檔與遠端來源。" + later;
+        overlay.new Dialog("刪除 0.7.1 重複項目？", body)
                 .action("取消", Ui.ButtonStyle.TEXT, null)
                 .action("刪除 " + MainActivity.count(r.duplicates.size()) + " 項", Ui.ButtonStyle.DANGER, () -> worker.submit(() -> {
                     long n = DuplicateCleanup.delete(r.duplicates);
-                    handler.post(() -> snack("已刪除 " + MainActivity.count(n) + " 個重複的檔案和資料夾"));
+                    handler.post(() -> snack("已刪除 " + MainActivity.count(n) + " 個重複項目"));
                 })).show();
     }
 
@@ -531,9 +531,9 @@ public class SettingsActivity extends Activity {
     // Actions
 
     private void startImport() {
-        if (TransferService.busy()) { message("傳輸進行中，等完成後再匯入設定檔。"); return; }
+        if (TransferService.busy()) { message("請等傳輸完成後再匯入設定檔。"); return; }
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
-        try { startActivityForResult(i, IMPORT); } catch (Exception e) { message("手機裡沒有能選擇檔案的 App。"); }
+        try { startActivityForResult(i, IMPORT); } catch (Exception e) { message("找不到可選擇檔案的 App。"); }
     }
 
     private void startExport() {
@@ -541,7 +541,7 @@ public class SettingsActivity extends Activity {
         if (!conf.isFile() || conf.length() == 0) { message("目前沒有連線可以匯出。"); return; }
         Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/octet-stream")
                 .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "rclone.conf");
-        try { startActivityForResult(i, EXPORT); } catch (Exception e) { message("手機裡沒有能儲存檔案的 App。"); }
+        try { startActivityForResult(i, EXPORT); } catch (Exception e) { message("找不到可儲存檔案的 App。"); }
     }
 
     @Override protected void onActivityResult(int req, int result, Intent data) {
@@ -554,7 +554,7 @@ public class SettingsActivity extends Activity {
                 handler.post(() -> {
                     if (isDestroyed()) return;
                     if (existing == 0) { runImport(uri); return; }
-                    overlay.new Dialog("匯入這份設定檔？", "目前的 " + existing + " 個連線會被設定檔裡的連線取代。要保留目前的連線，請先匯出備份。")
+                    overlay.new Dialog("匯入這份設定檔？", "目前的 " + existing + " 個連線會被覆蓋。若要保留現有連線，請先匯出備份。")
                             .action("取消", Ui.ButtonStyle.TEXT, null)
                             .action("取代並匯入", Ui.ButtonStyle.FILLED, () -> runImport(uri)).show();
                 });
@@ -576,7 +576,7 @@ public class SettingsActivity extends Activity {
     }
 
     private void runImport(Uri uri) {
-        if (TransferService.busy()) { message("傳輸進行中，等完成後再匯入設定檔。"); return; }
+        if (TransferService.busy()) { message("請等傳輸完成後再匯入設定檔。"); return; }
         worker.execute(() -> {
             String problem = null;
             int count = 0;
@@ -611,7 +611,7 @@ public class SettingsActivity extends Activity {
     }
 
     private void clearCache() {
-        if (TransferService.busy()) { message("傳輸進行中，等完成後再清除暫存資料。"); return; }
+        if (TransferService.busy()) { message("請等傳輸完成後再清除暫存資料。"); return; }
         worker.execute(() -> {
             long size = sizeOf(getCacheDir());
             File[] items = getCacheDir().listFiles();
